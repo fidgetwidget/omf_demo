@@ -1,0 +1,65 @@
+body, body * {
+  line-height: 20px;
+  font-size: 16px;
+  font-family: Helvetica;
+}
+
+.render-container{
+  position: relative;
+  padding: 20px;
+}
+
+.info-container {
+  padding: 0 20px;
+}
+
+.page-title {
+  margin: 0;
+  margin-bottom: 20px;
+  line-height: 40px;
+  font-size: 34px;
+}
+
+.info-box {
+  position: relative;
+  width: 800px;
+  padding: 30px 20px 10px;
+  background-color: #efefef;
+}
+
+.info-box.hidden {
+  padding: 0 20px;
+  height: 40px;
+}
+
+.info-box.hidden ul,
+.info-box.hidden p { display: none; }
+
+.info-box .title,
+.info-box .close {
+  position: absolute;
+  top: 10px;
+}
+
+.info-box .title {
+  left: 20px;
+  margin: 0;
+  line-height: 20px;
+}
+
+.info-box .close {
+  right: 20px;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+.info-box .close:after {
+  display: block;
+  content: "↑";
+}
+
+
+.info-box.hidden .close:after {
+  display: block;
+  content: "↓"
+}

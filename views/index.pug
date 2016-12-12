@@ -1,0 +1,20 @@
+extends _/layout.pug
+
+block content
+  h1.page-title OMF Demo
+
+  #instructions.info-box.hidden
+
+    h4.title Instructions
+
+    a.close
+
+    ul
+      li Click to select a Unit. 
+      li WASD to move selected Unit.
+      li Space or Click off Unit to deselect.
+
+  #game_container.render-container
+
+  #debug_container.info-container
+    p debug stuff goes here

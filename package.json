@@ -1,0 +1,22 @@
+{
+  "name": "omf_demo",
+  "version": "1.0.0",
+  "description": "web demo of the omf concept",
+  "main": "server.js",
+  "author": "fidgetwidget <brandonbey@gmail.com> (http://fidgetwidget.ca)",
+  "license": "MIT",
+  "dependencies": {
+    "body-parser": "^1.15.2",
+    "express": "^4.11.0",
+    "lodash": "^4.16.4",
+    "lowdb": "^0.13.1",
+    "merge-stream": "^1.0.1",
+    "pug": "^2.0.0-beta6"
+  },
+  "devDependencies": {
+    "gulp": "^3.9.1",
+    "gulp-util": "^3.0.7",
+    "webpack": "^1.13.2",
+    "webpack-stream": "^3.2.0"
+  }
+}
