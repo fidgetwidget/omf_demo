@@ -24,22 +24,40 @@ Dom.ready(
               { name: 'test_floor',       url: 'data/testFloor.json'} );
 
     Game.loadAssets(function (loader, resources) {
-        TileData.floor = {
-            frames: ['', 'floor'],
-            properties: {}
-          };
-        TileData.wall = {
-            frames: ['', '', 'wall'],
-            properties: {wall: true}
-          };
+        initTileData();
         // var editor = new MapEditScene();
         // Game.loadScene(editor);
         var map = new MapScene(resources.test_floor.data);
-        var unit = new Unit('soldier');
-        unit.moveTo(10, 9, true);
         Game.loadScene(map);
-        map.addEntity(unit);
+        
+        addUnitsToMap(map);
+
         Game.run();
       });
     
   });
+
+function initTileData() {
+  // TODO: set these up to store the Texture in each frame 
+  Game.TileData.floor = {
+    frames: ['floor'],
+    properties: {}
+  };
+
+  Game.TileData.wall = {
+    frames: ['wall'],
+    properties: {
+      wall: true
+    }
+  };
+}
+
+function addUnitsToMap(map) {
+  var unit = new Unit('soldier');
+  unit.moveTo(10, 9, true);
+  map.addEntity(unit);
+
+  var unit = new Unit('farmer');
+  unit.moveTo(8, 4, true);
+  map.addEntity(unit);
+}

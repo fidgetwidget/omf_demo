@@ -3,11 +3,17 @@ var EventTarget = require(__dirname+'/lib/EventTarget');
 var Scene       = require(__dirname+'/game/Scene');
 var Input       = require(__dirname+'/game/Input');
 var TileMap     = require(__dirname+'/game/TileMap');
-var Unit        = require(__dirname+'/omf/Unit');
+var TileData    = require(__dirname+'/game/TileData');
 
-var elms = [];
+
+var dom_elements = [];
 var eventTarget = new EventTarget();
-var stage_width = 800, stage_height = 600;
+var DEFAULT_TILE_WIDTH = 32;
+var DEFAULT_TILE_HEIGHT = 32;
+var DEFAULT_STAGE_WIDTH = 800;
+var DEFAULT_STAGE_HEIGHT = 600;
+
+
 var Game = {
   renderOptions: {
     antialias: false, 
@@ -15,28 +21,38 @@ var Game = {
     resolution: 1
   },
   assets: [],
-  _loopId: null
+  _loopId: null,
+  properties: {
+    tile_width:   DEFAULT_TILE_WIDTH,
+    tile_height:  DEFAULT_TILE_HEIGHT,
+    stage_width:  DEFAULT_STAGE_WIDTH,
+    stage_height: DEFAULT_STAGE_HEIGHT
+  },
+  utils: {}
 }
+// Setting aliases
+Game.props = Game.properties;
 
 Game.init = function () {
-  init();
-  window.Game = Game;
-  //Create the renderer
+  // grab the dom elements
+  dom_elements['game_container'] = Dom.byId('game_container');
+  dom_elements['debug_container'] = Dom.byId('debug_container');
+  // initialize things that don't need the canvas
+  initialize();
+  //Create the renderer  
   this.renderer = PIXI.autoDetectRenderer(
-    stage_width, 
-    stage_height, 
-    this.renderOptions );
+    Game.props.stage_width, 
+    Game.props.stage_height, 
+    Game.renderOptions );
   this.stage = new PIXI.Container();
-
-  elms['game_container'] = Dom.byId('game_container');
-  elms['debug_container'] = Dom.byId('debug_container');
-  elms['game_container'].appendChild(this.renderer.view);
-
-  initEvents();
-  initProperties();
-  initSceneManager();
+  dom_elements['game_container'].appendChild(this.renderer.view);
+  // Add some things to the stage
+  this.stage.addChild(this.sceneManager);
+  // Add the listeners
+  addEventListeners();
 }
 
+// Game Asset Loading
 Game.loadAssets = function (progress, complete) {
   if (complete === undefined)
   {
@@ -46,6 +62,7 @@ Game.loadAssets = function (progress, complete) {
   loadAssets(Game.assets, progress, complete);
 }
 
+// Game Animation Loop
 Game.run = function () { 
   animate(); 
 }
@@ -55,6 +72,7 @@ Game.stop = function () {
     cancelAnimationFrame(Game._loopId);
 }
 
+// Game Scene Managment
 Game.loadScene = function (scene) {
   if (! scene instanceof Scene) return false;
   this.sceneManager.addScene(scene, true);
@@ -64,6 +82,7 @@ Game.getScene = function (name) {
   return this.sceneManager.getScene(name);
 }
 
+// Game Entity Managment
 Game.saveEntity = function (entity) {
   this._entities[entity.uid] = entity;
   if (! this._entitiesByType[this.entType])
@@ -77,6 +96,7 @@ Game.getEntity = function (uid) {
   return this._entities[uid]
 }
 
+// Game Event Handling
 Game.on = function (name, cb) {
   eventTarget.addEventListener(name, cb);
 }
@@ -89,42 +109,18 @@ Game.trigger = function (name, context) {
   eventTarget.dispatchEvent({ type: name }, context);
 }
 
+// 
+// Internal Helpers
+// 
 
-function init()
-{
-  Input.init();
-  Game.Input = Input;
+function initialize() {
+  window.Game = Game;
   Game._entities = {};
   Game._entitiesByType = {};
-  Game.mousePos = new PIXI.Point(0, 0);
-}
-
-function initEvents()
-{
-  window.addEventListener('mousemove', mousemove, false);
-}
-
-function initProperties()
-{
-  Game.properties = {};
-  Game.properties['tile_width']  = 32;
-  Game.properties['tile_height'] = 32;
-  Game.properties['stage_width']  = stage_width;
-  Game.properties['stage_height'] = stage_height;
-}
-
-function initSceneManager() {
+  Input.init();
+  Game.TileData = TileData;
+  Game.Input = Input;
   Game.sceneManager = new Scene('manager');
-  Game.stage.addChild(Game.sceneManager);
-}
-
-function mousemove(e) {
-  var canvas = Game.renderer.view,
-      rect = canvas.getBoundingClientRect(),
-      scaleX = canvas.width / rect.width, 
-      scaleY = canvas.height / rect.height;
-  Game.mousePos.x = (e.clientX - rect.left) * scaleX;
-  Game.mousePos.y = (e.clientY - rect.top) * scaleY;
 }
 
 function loadAssets(assets, progress, complete) {
@@ -152,7 +148,7 @@ function animate() {
   Game.Input.update();
   Game.trigger('post_update');
 
-  elms['debug_container'].innerText = "["+Game.mousePos.x+"|"+Game.mousePos.y+"]";
+  dom_elements['debug_container'].innerText = "["+Input.x+"|"+Input.y+"]";
 }
 
 

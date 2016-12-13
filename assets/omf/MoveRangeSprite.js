@@ -1,20 +1,20 @@
 
 var directions = [[-1, 0], [0, -1], [1, 0], [0, 1]];
 
-var UnitMoveRange = function (map) {
+var MoveRangeSprite = function (map) {
   this.tiles = [];
   this.map = map;
   PIXI.Graphics.call(this);
 }
 
-UnitMoveRange.prototype = Object.create(PIXI.Graphics.prototype);
-UnitMoveRange.prototype.constructor = UnitMoveRange;
+MoveRangeSprite.prototype = Object.create(PIXI.Graphics.prototype);
+MoveRangeSprite.prototype.constructor = MoveRangeSprite;
 
-UnitMoveRange.prototype.clearTiles = function () {
+MoveRangeSprite.prototype.clearTiles = function () {
   this.tiles.length = 0;
 }
 
-UnitMoveRange.prototype.drawUnitsRange = function (unit, range) {
+MoveRangeSprite.prototype.drawUnitsRange = function (unit, range) {
   this.clearTiles();
   console.log('drawRangeStart');
   this.clear();
@@ -24,7 +24,7 @@ UnitMoveRange.prototype.drawUnitsRange = function (unit, range) {
   console.log('drawRangeEnd');
 }
 
-UnitMoveRange.prototype.drawTile = function (unit, x, y, r, max_r) {
+MoveRangeSprite.prototype.drawTile = function (unit, x, y, r, max_r) {
   var d = 0, dir = null, xx = x, yy = y, l = directions.length;
 
   if (r >= max_r) return;
@@ -57,4 +57,4 @@ function drawRect(g, x, y) {
   g.drawRect(xx, yy, w, h);
 }
 
-module.exports = UnitMoveRange;
+module.exports = MoveRangeSprite;

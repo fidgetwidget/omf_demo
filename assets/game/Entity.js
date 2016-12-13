@@ -24,9 +24,6 @@ Entity.prototype = {
   get y ()              { return this.sprite.y; },
   set y (val)           { this.sprite.y = val; },
 
-  get interactive ()    { return this.sprite.interactive; },
-  set interactive (val) { this.sprite.interactive = val; },
-
   update: function () {}
 }
 

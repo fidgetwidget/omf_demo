@@ -1,7 +1,7 @@
 var Keyboard = require(__dirname+'/../game/Keyboard');
 var Scene = require(__dirname+'/../game/Scene');
 var TileMap = require(__dirname+'/../game/TileMap');
-var UnitMoveRange = require(__dirname+'/UnitMoveRange');
+var MoveRangeSprite = require(__dirname+'/MoveRangeSprite');
 
 var MapScene = function (floorData) {
   if (floorData === undefined) floorData = { name: 'test', w: 200, h: 100 };
@@ -136,7 +136,7 @@ function getTileY(y) {
 
 
 function createMoveRangeSprite(map) {
-  var g = new UnitMoveRange(map);
+  var g = new MoveRangeSprite(map);
   g.visible = false;
   return g;
 }

@@ -57,7 +57,7 @@ Tile.make = function (type, id) {
   return t.adjust(type, id);
 }
 
-
+// TODO: change it so that the TileData[type].frames[id] is the actual texture...
 function getTexture(type, id) {
   var frame = getFrame(type, id);
   return PIXI.Texture.fromFrame(frame);

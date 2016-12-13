@@ -1,5 +1,5 @@
 
-var UnitHealthSprite = function (hearts)
+var HealthSprite = function (hearts)
 {
   this.max_health = hearts;
   this.cur_health = hearts * 2; // half values
@@ -9,10 +9,10 @@ var UnitHealthSprite = function (hearts)
   // this.x = -(this.width * 0.5);
 }
 
-UnitHealthSprite.prototype = Object.create(PIXI.Container.prototype);
-UnitHealthSprite.prototype.constructor = UnitHealthSprite;
+HealthSprite.prototype = Object.create(PIXI.Container.prototype);
+HealthSprite.prototype.constructor = HealthSprite;
 
-UnitHealthSprite.prototype.changeValue = function (count) {
+HealthSprite.prototype.changeValue = function (count) {
 
 
 
@@ -34,4 +34,4 @@ function createSprites(s) {
   }
 }
 
-module.exports = UnitHealthSprite;
+module.exports = HealthSprite;

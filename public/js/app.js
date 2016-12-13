@@ -47,9 +47,9 @@
 	var PageScripts   = __webpack_require__(1);
 	var Dom           = __webpack_require__(2);
 	var Game          = __webpack_require__(3);
-	var MapScene      = __webpack_require__(17);
-	var MapEditScene  = __webpack_require__(19);
-	var Unit          = __webpack_require__(12);
+	var MapScene      = __webpack_require__(12);
+	var MapEditScene  = __webpack_require__(14);
+	var Unit          = __webpack_require__(16);
 	var TileData      = __webpack_require__(11);
 
 	var floor_data;
@@ -70,26 +70,43 @@
 	              { name: 'test_floor',       url: 'data/testFloor.json'} );
 
 	    Game.loadAssets(function (loader, resources) {
-	        TileData.floor = {
-	            frames: ['', 'floor'],
-	            properties: {}
-	          };
-	        TileData.wall = {
-	            frames: ['', '', 'wall'],
-	            properties: {wall: true}
-	          };
+	        initTileData();
 	        // var editor = new MapEditScene();
 	        // Game.loadScene(editor);
 	        var map = new MapScene(resources.test_floor.data);
-	        var unit = new Unit('soldier');
-	        unit.moveTo(10, 9, true);
 	        Game.loadScene(map);
-	        map.addEntity(unit);
+	        
+	        addUnitsToMap(map);
+
 	        Game.run();
 	      });
 	    
 	  });
 
+	function initTileData() {
+	  // TODO: set these up to store the Texture in each frame 
+	  Game.TileData.floor = {
+	    frames: ['floor'],
+	    properties: {}
+	  };
+
+	  Game.TileData.wall = {
+	    frames: ['wall'],
+	    properties: {
+	      wall: true
+	    }
+	  };
+	}
+
+	function addUnitsToMap(map) {
+	  var unit = new Unit('soldier');
+	  unit.moveTo(10, 9, true);
+	  map.addEntity(unit);
+
+	  var unit = new Unit('farmer');
+	  unit.moveTo(8, 4, true);
+	  map.addEntity(unit);
+	}
 
 /***/ },
 /* 1 */
@@ -179,11 +196,17 @@
 	var Scene       = __webpack_require__(5);
 	var Input       = __webpack_require__(7);
 	var TileMap     = __webpack_require__(9);
-	var Unit        = __webpack_require__(12);
+	var TileData    = __webpack_require__(11);
 
-	var elms = [];
+
+	var dom_elements = [];
 	var eventTarget = new EventTarget();
-	var stage_width = 800, stage_height = 600;
+	var DEFAULT_TILE_WIDTH = 32;
+	var DEFAULT_TILE_HEIGHT = 32;
+	var DEFAULT_STAGE_WIDTH = 800;
+	var DEFAULT_STAGE_HEIGHT = 600;
+
+
 	var Game = {
 	  renderOptions: {
 	    antialias: false, 
@@ -191,28 +214,38 @@
 	    resolution: 1
 	  },
 	  assets: [],
-	  _loopId: null
+	  _loopId: null,
+	  properties: {
+	    tile_width:   DEFAULT_TILE_WIDTH,
+	    tile_height:  DEFAULT_TILE_HEIGHT,
+	    stage_width:  DEFAULT_STAGE_WIDTH,
+	    stage_height: DEFAULT_STAGE_HEIGHT
+	  },
+	  utils: {}
 	}
+	// Setting aliases
+	Game.props = Game.properties;
 
 	Game.init = function () {
-	  init();
-	  window.Game = Game;
-	  //Create the renderer
+	  // grab the dom elements
+	  dom_elements['game_container'] = Dom.byId('game_container');
+	  dom_elements['debug_container'] = Dom.byId('debug_container');
+	  // initialize things that don't need the canvas
+	  initialize();
+	  //Create the renderer  
 	  this.renderer = PIXI.autoDetectRenderer(
-	    stage_width, 
-	    stage_height, 
-	    this.renderOptions );
+	    Game.props.stage_width, 
+	    Game.props.stage_height, 
+	    Game.renderOptions );
 	  this.stage = new PIXI.Container();
-
-	  elms['game_container'] = Dom.byId('game_container');
-	  elms['debug_container'] = Dom.byId('debug_container');
-	  elms['game_container'].appendChild(this.renderer.view);
-
-	  initEvents();
-	  initProperties();
-	  initSceneManager();
+	  dom_elements['game_container'].appendChild(this.renderer.view);
+	  // Add some things to the stage
+	  this.stage.addChild(this.sceneManager);
+	  // Add the listeners
+	  addEventListeners();
 	}
 
+	// Game Asset Loading
 	Game.loadAssets = function (progress, complete) {
 	  if (complete === undefined)
 	  {
@@ -222,6 +255,7 @@
 	  loadAssets(Game.assets, progress, complete);
 	}
 
+	// Game Animation Loop
 	Game.run = function () { 
 	  animate(); 
 	}
@@ -231,6 +265,7 @@
 	    cancelAnimationFrame(Game._loopId);
 	}
 
+	// Game Scene Managment
 	Game.loadScene = function (scene) {
 	  if (! scene instanceof Scene) return false;
 	  this.sceneManager.addScene(scene, true);
@@ -240,6 +275,7 @@
 	  return this.sceneManager.getScene(name);
 	}
 
+	// Game Entity Managment
 	Game.saveEntity = function (entity) {
 	  this._entities[entity.uid] = entity;
 	  if (! this._entitiesByType[this.entType])
@@ -253,6 +289,7 @@
 	  return this._entities[uid]
 	}
 
+	// Game Event Handling
 	Game.on = function (name, cb) {
 	  eventTarget.addEventListener(name, cb);
 	}
@@ -265,42 +302,18 @@
 	  eventTarget.dispatchEvent({ type: name }, context);
 	}
 
+	// 
+	// Internal Helpers
+	// 
 
-	function init()
-	{
-	  Input.init();
-	  Game.Input = Input;
+	function initialize() {
+	  window.Game = Game;
 	  Game._entities = {};
 	  Game._entitiesByType = {};
-	  Game.mousePos = new PIXI.Point(0, 0);
-	}
-
-	function initEvents()
-	{
-	  window.addEventListener('mousemove', mousemove, false);
-	}
-
-	function initProperties()
-	{
-	  Game.properties = {};
-	  Game.properties['tile_width']  = 32;
-	  Game.properties['tile_height'] = 32;
-	  Game.properties['stage_width']  = stage_width;
-	  Game.properties['stage_height'] = stage_height;
-	}
-
-	function initSceneManager() {
+	  Input.init();
+	  Game.TileData = TileData;
+	  Game.Input = Input;
 	  Game.sceneManager = new Scene('manager');
-	  Game.stage.addChild(Game.sceneManager);
-	}
-
-	function mousemove(e) {
-	  var canvas = Game.renderer.view,
-	      rect = canvas.getBoundingClientRect(),
-	      scaleX = canvas.width / rect.width, 
-	      scaleY = canvas.height / rect.height;
-	  Game.mousePos.x = (e.clientX - rect.left) * scaleX;
-	  Game.mousePos.y = (e.clientY - rect.top) * scaleY;
 	}
 
 	function loadAssets(assets, progress, complete) {
@@ -328,7 +341,7 @@
 	  Game.Input.update();
 	  Game.trigger('post_update');
 
-	  elms['debug_container'].innerText = "["+Game.mousePos.x+"|"+Game.mousePos.y+"]";
+	  dom_elements['debug_container'].innerText = "["+Input.x+"|"+Input.y+"]";
 	}
 
 
@@ -509,9 +522,6 @@
 
 	  get y ()              { return this.sprite.y; },
 	  set y (val)           { this.sprite.y = val; },
-
-	  get interactive ()    { return this.sprite.interactive; },
-	  set interactive (val) { this.sprite.interactive = val; },
 
 	  update: function () {}
 	}
@@ -923,7 +933,7 @@
 	  return t.adjust(type, id);
 	}
 
-
+	// TODO: change it so that the TileData[type].frames[id] is the actual texture...
 	function getTexture(type, id) {
 	  var frame = getFrame(type, id);
 	  return PIXI.Texture.fromFrame(frame);
@@ -969,265 +979,10 @@
 /* 12 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var UnitFrames   = __webpack_require__(13);
-	var UnitStates   = __webpack_require__(14);
-	var UnitStats    = __webpack_require__(15);
-	var UnitHealthSprite = __webpack_require__(16);
-	var Entity       = __webpack_require__(6);
-
-	var default_offset = { x: 0, y: 8 }; // gives the unit a position more In the tile space
-
-	// Extends Entity
-	var Unit = function (type) {
-
-	  this.type         = type;
-	  this._state       = UnitStates.getState('idle');
-	  this._textures    = getUnitTypeTextures(this.type);
-	  this._destination = new PIXI.Point(0, 0);
-	  this.offset       = new PIXI.Point(default_offset.x, default_offset.y);
-	  setStats(this.type, this);
-	  
-	  var sprite = makeUnitSprite(this);
-	  Entity.call(this, 'Unit', sprite);
-
-	  this.healthSprite = makeHealthSprite(this);
-	  this.sprite.addChild(this.healthSprite);
-
-	  this.interactive = true;
-	  this.sprite.on('click', onClick, this);
-	  this.sprite.on('touchstart', onClick, this);
-
-	}
-
-	Unit.prototype = Object.create(Entity.prototype);
-	Unit.prototype.constructor = Unit;
-
-	Object.defineProperty(Unit.prototype, 'state', {
-	  get: function ()    { return this._state; },
-	  set: function (val) {
-	    this._state = val;
-	    // TODO: if the state calls for an animation, 
-	    //        set the sprite up to be animated
-	    //        otherwise, just assign the correct texture
-	  }
-	});
-
-	Object.defineProperty(Unit.prototype, 'tileX', {
-	  get: function ()    { return Math.floor(this.xx / Game.properties.tile_width); }
-	})
-
-	Object.defineProperty(Unit.prototype, 'tileY', {
-	  get: function ()    { return Math.floor(this.yy / Game.properties.tile_height); }
-	});
-
-	Object.defineProperty(Unit.prototype, 'xx', {
-	  get: function ()    { return this.x - (this.sprite.anchor.x * Game.properties.tile_width ) + this.offset.x; },
-	  set: function (val) { this.x = val +  (this.sprite.anchor.x * Game.properties.tile_width ) - this.offset.x; }
-	});
-
-	Object.defineProperty(Unit.prototype, 'yy', {
-	  get: function ()    { return this.y - (this.sprite.anchor.y * Game.properties.tile_height ) + this.offset.y; },
-	  set: function (val) { this.y = val +  (this.sprite.anchor.y * Game.properties.tile_height ) - this.offset.y; }
-	});
-
-	Object.defineProperty(Unit.prototype, 'hasDestination', {
-	  get: function ()    { return this.xx != this._destination.x || this.yy != this._destination.y; }
-	})
-
-	Unit.prototype.moveTo = function (x, y, immediate) { 
-	  if (immediate === undefined) immediate = false;
-	  
-	  if (immediate)
-	  {
-	    this.xx = this._destination.x = x * Game.properties.tile_width;
-	    this.yy = this._destination.y = y * Game.properties.tile_height; 
-	  }
-	  else
-	    setDestination(this, x, y);
-	}
-
-	Unit.prototype.update = function () { 
-	  move(this); 
-	}
-
-
-
-	function lerpMovement(cur, dest, size)
-	{
-	  var dif, t;
-	  dif = dest - cur;
-	  if (dif == 0) return cur;
-	  t = Math.abs(1 / (dif / size)) * 0.25;
-	  return Math.floor(cur + t * dif);
-	}
-
-	function getUnitTypeTextures(type)
-	{
-	  if (! UnitFrames.hasOwnProperty(type))
-	    type = 'default';
-
-	  return UnitFrames[type];
-	}
-
-	function setStats(type, unit)
-	{
-	  var stats = UnitStats[type];
-	  for (var k in stats)
-	    unit[k] = stats[k];
-	}
-
-	// TODO: support animations
-	function makeUnitSprite(unit)
-	{
-	  var sprite = PIXI.Sprite.fromFrame(unit._textures['idle']);
-	  sprite.anchor.x = 0.5;
-	  sprite.anchor.y = 1;
-	  sprite.x = (Game.properties.tile_width  * sprite.anchor.x) - unit.offset.x;
-	  sprite.y = (Game.properties.tile_height * sprite.anchor.y) - unit.offset.y;
-	  return sprite;
-	}
-
-	function makeHealthSprite(unit)
-	{
-	  var hearts = unit.max_health ? unit.max_health : 2;
-	  var s = new UnitHealthSprite(hearts);
-	  s.y = unit.y - unit.sprite.height - 32;
-	  return s;
-	}
-
-	function move(unit)
-	{
-	  if (! unit.hasDestination) return;
-	  
-	  unit.xx = lerpMovement(unit.xx, unit._destination.x, Game.properties.tile_width);
-	  unit.yy = lerpMovement(unit.yy, unit._destination.y, Game.properties.tile_height);
-	}
-
-	function setDestination(unit, tileX, tileY)
-	{
-	  unit._destination.x = tileX * Game.properties.tile_width;
-	  unit._destination.y = tileY * Game.properties.tile_height;
-	}
-
-	function onClick(e)
-	{
-	  if (this.scene && typeof this.scene.unitClicked == 'function')
-	    this.scene.unitClicked(this);
-	}
-
-
-	module.exports = Unit;
-
-
-/***/ },
-/* 13 */
-/***/ function(module, exports) {
-
-	var UnitFrames = {};
-
-	UnitFrames['default'] = { 'idle': 'unit_placeholder' };
-
-	module.exports = UnitFrames;
-
-
-/***/ },
-/* 14 */
-/***/ function(module, exports) {
-
-	var _states = { 'idle': 0 };
-	var UnitStates = {};
-
-	UnitStates.getState = function (name) {
-	  return _states[name];
-	}
-
-	module.exports = UnitStates;
-
-
-/***/ },
-/* 15 */
-/***/ function(module, exports) {
-
-	var UnitStats = {
-
-	  'farmer': {
-	    'max_health': 2,
-	    'move_range': 6,
-	    'attack_range': 1
-	  },
-	  'soldier': {
-	    'max_health': 3,
-	    'move_range': 5,
-	    'attack_range': 2
-	  },
-	  'archer': {
-	    'max_health': 2,
-	    'move_range': 4,
-	    'attack_range': 4
-	  },
-	  'lumberjack': {
-	    'max_health': 4,
-	    'move_range': 5,
-	    'attack_range': 1
-	  }
-
-	};
-
-
-
-	module.exports = UnitStats;
-
-/***/ },
-/* 16 */
-/***/ function(module, exports) {
-
-	
-	var UnitHealthSprite = function (hearts)
-	{
-	  this.max_health = hearts;
-	  this.cur_health = hearts * 2; // half values
-	  this.sprites = [];
-	  PIXI.Container.call(this);
-	  createSprites(this);
-	  // this.x = -(this.width * 0.5);
-	}
-
-	UnitHealthSprite.prototype = Object.create(PIXI.Container.prototype);
-	UnitHealthSprite.prototype.constructor = UnitHealthSprite;
-
-	UnitHealthSprite.prototype.changeValue = function (count) {
-
-
-
-	}
-
-	function createSprites(s) {
-
-	  var count = s.max_health;
-
-	  for (var i = 0, l = count; i < l; i++)
-	  {
-	    var sprite = PIXI.Sprite.fromFrame('heart');
-	    sprite.anchor.x = 0.5;
-	    sprite.anchor.y = 0.5;
-	    var offset = (i - ((l - 1) * 0.5));
-	    sprite.x = (offset * sprite.width);
-	    s.sprites.push(sprite);
-	    s.addChild(sprite);
-	  }
-	}
-
-	module.exports = UnitHealthSprite;
-
-
-/***/ },
-/* 17 */
-/***/ function(module, exports, __webpack_require__) {
-
 	var Keyboard = __webpack_require__(8);
 	var Scene = __webpack_require__(5);
 	var TileMap = __webpack_require__(9);
-	var UnitMoveRange = __webpack_require__(18);
+	var MoveRangeSprite = __webpack_require__(13);
 
 	var MapScene = function (floorData) {
 	  if (floorData === undefined) floorData = { name: 'test', w: 200, h: 100 };
@@ -1362,7 +1117,7 @@
 
 
 	function createMoveRangeSprite(map) {
-	  var g = new UnitMoveRange(map);
+	  var g = new MoveRangeSprite(map);
 	  g.visible = false;
 	  return g;
 	}
@@ -1379,26 +1134,26 @@
 
 
 /***/ },
-/* 18 */
+/* 13 */
 /***/ function(module, exports) {
 
 	
 	var directions = [[-1, 0], [0, -1], [1, 0], [0, 1]];
 
-	var UnitMoveRange = function (map) {
+	var MoveRangeSprite = function (map) {
 	  this.tiles = [];
 	  this.map = map;
 	  PIXI.Graphics.call(this);
 	}
 
-	UnitMoveRange.prototype = Object.create(PIXI.Graphics.prototype);
-	UnitMoveRange.prototype.constructor = UnitMoveRange;
+	MoveRangeSprite.prototype = Object.create(PIXI.Graphics.prototype);
+	MoveRangeSprite.prototype.constructor = MoveRangeSprite;
 
-	UnitMoveRange.prototype.clearTiles = function () {
+	MoveRangeSprite.prototype.clearTiles = function () {
 	  this.tiles.length = 0;
 	}
 
-	UnitMoveRange.prototype.drawUnitsRange = function (unit, range) {
+	MoveRangeSprite.prototype.drawUnitsRange = function (unit, range) {
 	  this.clearTiles();
 	  console.log('drawRangeStart');
 	  this.clear();
@@ -1408,7 +1163,7 @@
 	  console.log('drawRangeEnd');
 	}
 
-	UnitMoveRange.prototype.drawTile = function (unit, x, y, r, max_r) {
+	MoveRangeSprite.prototype.drawTile = function (unit, x, y, r, max_r) {
 	  var d = 0, dir = null, xx = x, yy = y, l = directions.length;
 
 	  if (r >= max_r) return;
@@ -1441,15 +1196,15 @@
 	  g.drawRect(xx, yy, w, h);
 	}
 
-	module.exports = UnitMoveRange;
+	module.exports = MoveRangeSprite;
 
 
 /***/ },
-/* 19 */
+/* 14 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var MapScene    = __webpack_require__(17);
-	var EditStates  = __webpack_require__(20);
+	var MapScene    = __webpack_require__(12);
+	var EditStates  = __webpack_require__(15);
 
 	var MapEditScene = function () {
 	  var w, h, width, height;
@@ -1501,7 +1256,7 @@
 
 
 /***/ },
-/* 20 */
+/* 15 */
 /***/ function(module, exports) {
 
 	
@@ -1511,6 +1266,289 @@
 	}
 
 	module.exports = EditStates;
+
+
+/***/ },
+/* 16 */
+/***/ function(module, exports, __webpack_require__) {
+
+	var UnitFrames   = __webpack_require__(17);
+	var UnitStats    = __webpack_require__(18);
+	var Actor        = __webpack_require__(19);
+
+	// Extends Entity
+	var Unit = function (type) {
+
+	  this.type         = type;
+	  this._textures    = getUnitTypeTextures(this.type);
+	  var sprite = makeUnitSprite(this);
+	  this.initStats();
+	  Actor.call(this, 'Unit', sprite);
+	}
+
+	Unit.prototype = Object.create(Actor.prototype);
+	Unit.prototype.constructor = Unit;
+
+	Unit.prototype.initStats = function ()
+	{
+	  var stats = UnitStats[this.type];
+	  for (var k in stats)
+	    this[k] = stats[k];
+	}
+
+	Unit.prototype.initSprites = function () 
+	{
+	  this.offset.y = 8;
+	  
+	  this.sprite.interactive = true;
+	  this.sprite.on('click', onClick, this);
+	  this.sprite.on('touchstart', onClick, this);
+
+	  Actor.prototype.initSprites.call(this);
+	}
+
+
+	function getUnitTypeTextures(type)
+	{
+	  if (! UnitFrames.hasOwnProperty(type))
+	    type = 'default';
+
+	  return UnitFrames[type];
+	}
+
+	// TODO: support animations
+	function makeUnitSprite(unit)
+	{
+	  return PIXI.Sprite.fromFrame(unit._textures['idle']);
+	}
+
+
+	function onClick(e)
+	{
+	  if (this.scene && typeof this.scene.unitClicked == 'function')
+	    this.scene.unitClicked(this);
+	}
+
+
+	module.exports = Unit;
+
+
+/***/ },
+/* 17 */
+/***/ function(module, exports) {
+
+	var UnitFrames = {};
+
+	UnitFrames['default'] = { 'idle': 'unit_placeholder' };
+
+	module.exports = UnitFrames;
+
+
+/***/ },
+/* 18 */
+/***/ function(module, exports) {
+
+	var UnitStats = {
+
+	  'farmer': {
+	    'max_health': 2,
+	    'move_range': 6,
+	    'attack_range': 1
+	  },
+	  'soldier': {
+	    'max_health': 3,
+	    'move_range': 5,
+	    'attack_range': 2
+	  },
+	  'archer': {
+	    'max_health': 2,
+	    'move_range': 4,
+	    'attack_range': 4
+	  },
+	  'lumberjack': {
+	    'max_health': 4,
+	    'move_range': 5,
+	    'attack_range': 1
+	  }
+
+	};
+
+
+
+	module.exports = UnitStats;
+
+/***/ },
+/* 19 */
+/***/ function(module, exports, __webpack_require__) {
+
+	var HealthSprite = __webpack_require__(20);
+	var Entity       = __webpack_require__(6);
+	var ACTOR_STATES = __webpack_require__(21);
+
+	// Extends Entity
+	var Actor = function (entType, sprite) {
+	  
+	  this._state = ACTOR_STATES.IDLE;
+	  this._destination = new PIXI.Point(0,0);
+	  this.offset = new PIXI.Point(0,0);
+
+	  Entity.call(this, entType, sprite)
+
+	  this.initSprites();
+	}
+
+	Actor.prototype = Object.create(Entity.prototype);
+	Actor.prototype.constructor = Actor;
+
+	Object.defineProperty(Actor.prototype, 'state', {
+	  get: function ()    { return this._state; },
+	  set: function (val) {
+	    this._state = val;
+	    this.setAnimation();
+	  }
+	});
+
+	// Top Left position
+	Object.defineProperty(Actor.prototype, 'xx', {
+	  get: function ()    { return this.x - (this.sprite.anchor.x * Game.properties.tile_width ) + this.offset.x; },
+	  set: function (val) { this.x = val +  (this.sprite.anchor.x * Game.properties.tile_width ) - this.offset.x; }
+	});
+	Object.defineProperty(Actor.prototype, 'yy', {
+	  get: function ()    { return this.y - (this.sprite.anchor.y * Game.properties.tile_height ) + this.offset.y; },
+	  set: function (val) { this.y = val +  (this.sprite.anchor.y * Game.properties.tile_height ) - this.offset.y; }
+	});
+
+	// Tile Position
+	Object.defineProperty(Actor.prototype, 'tileX', {
+	  get: function ()    { return Math.floor(this.xx / Game.properties.tile_width); }
+	})
+	Object.defineProperty(Actor.prototype, 'tileY', {
+	  get: function ()    { return Math.floor(this.yy / Game.properties.tile_height); }
+	});
+
+	Object.defineProperty(Actor.prototype, 'hasDestination', {
+	  get: function ()    { return this.xx != this._destination.x || this.yy != this._destination.y; }
+	})
+
+	Actor.prototype.initSprites = function () {
+	  // set the sprites anchor & initial position
+	  this.sprite.anchor.x = 0.5;
+	  this.sprite.anchor.y = 1;
+	  this.sprite.x = (Game.properties.tile_width  * this.sprite.anchor.x) - this.offset.x;
+	  this.sprite.y = (Game.properties.tile_height * this.sprite.anchor.y) - this.offset.y;
+
+	  // create and show the health
+	  this.healthSprite = makeHealthSprite(this);
+	  this.sprite.addChild(this.healthSprite);
+	}
+
+	// Move to Tile Position
+	Actor.prototype.moveTo = function (x, y, immediate) { 
+	  if (immediate === undefined) immediate = false;
+	  
+	  if (immediate)
+	    setPosition(this, x, y);
+	  else
+	    setDestination(this, x, y);
+	}
+
+	Actor.prototype.update = function () { 
+	  if (! this.hasDestination) return;
+	  
+	  this.xx = lerpMovement(this.xx, this._destination.x, Game.properties.tile_width);
+	  this.yy = lerpMovement(this.yy, this._destination.y, Game.properties.tile_height);
+	}
+
+
+
+	function lerpMovement(cur, dest, size)
+	{
+	  var dif, t;
+	  dif = dest - cur;
+	  if (dif == 0) return cur;
+	  t = Math.abs(1 / (dif / size)) * 0.25;
+	  return Math.floor(cur + t * dif);
+	}
+
+
+	function makeHealthSprite(unit)
+	{
+	  var hearts = unit.max_health ? unit.max_health : 2;
+	  var s = new HealthSprite(hearts);
+	  s.y = unit.y - unit.sprite.height - 32;
+	  return s;
+	}
+
+
+	function setPosition(unit, tileX, tileY)
+	{
+	  unit.xx = unit._destination.x = tileX * Game.properties.tile_width;
+	  unit.yy = unit._destination.y = tileY * Game.properties.tile_height;
+	}
+
+
+	function setDestination(unit, tileX, tileY)
+	{
+	  unit._destination.x = tileX * Game.properties.tile_width;
+	  unit._destination.y = tileY * Game.properties.tile_height;
+	}
+
+	module.exports = Actor;
+
+
+/***/ },
+/* 20 */
+/***/ function(module, exports) {
+
+	
+	var HealthSprite = function (hearts)
+	{
+	  this.max_health = hearts;
+	  this.cur_health = hearts * 2; // half values
+	  this.sprites = [];
+	  PIXI.Container.call(this);
+	  createSprites(this);
+	  // this.x = -(this.width * 0.5);
+	}
+
+	HealthSprite.prototype = Object.create(PIXI.Container.prototype);
+	HealthSprite.prototype.constructor = HealthSprite;
+
+	HealthSprite.prototype.changeValue = function (count) {
+
+
+
+	}
+
+	function createSprites(s) {
+
+	  var count = s.max_health;
+
+	  for (var i = 0, l = count; i < l; i++)
+	  {
+	    var sprite = PIXI.Sprite.fromFrame('heart');
+	    sprite.anchor.x = 0.5;
+	    sprite.anchor.y = 0.5;
+	    var offset = (i - ((l - 1) * 0.5));
+	    sprite.x = (offset * sprite.width);
+	    s.sprites.push(sprite);
+	    s.addChild(sprite);
+	  }
+	}
+
+	module.exports = HealthSprite;
+
+
+/***/ },
+/* 21 */
+/***/ function(module, exports) {
+
+	
+	var ActorStates = {
+	  IDLE: 'idle'
+	};
+
+	module.exports = ActorStates;
 
 
 /***/ }
