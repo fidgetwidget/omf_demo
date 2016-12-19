@@ -1,4 +1,6 @@
 
+// A simple event dispatcher & target
+
 var EventTarget = function() {
   this.listeners = {};
 };

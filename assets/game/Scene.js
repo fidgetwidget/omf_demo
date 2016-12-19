@@ -9,6 +9,8 @@ var Scene = function (name) {
   this.showing = [];
   
   PIXI.Container.call(this);  
+  this.entContainer = new PIXI.Container();
+  this.addChild(this.entContainer);
 }
 
 Scene.prototype = Object.create(PIXI.Container.prototype);
@@ -45,7 +47,7 @@ Scene.prototype.addEntity = function (ent) {
   if (! this.entities[ent.entType]) 
     this.entities[ent.entType] = [];
   this.entities[ent.entType].push(ent);
-  this.addChild(ent.sprite);
+  this.entContainer.addChild(ent.sprite);
   return true;
 }
 

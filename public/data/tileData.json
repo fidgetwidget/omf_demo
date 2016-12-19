@@ -1,0 +1,10 @@
+{
+  "types": [{
+    "name": "floor",
+    "frames": ["floor"]
+  }, {
+    "name": "wall",
+    "frames": ["wall"],
+    "properties": { "wall": true }
+  }]
+}

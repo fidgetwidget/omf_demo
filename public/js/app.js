@@ -48,8 +48,8 @@
 	var Dom           = __webpack_require__(2);
 	var Game          = __webpack_require__(3);
 	var MapScene      = __webpack_require__(12);
-	var MapEditScene  = __webpack_require__(14);
-	var Unit          = __webpack_require__(16);
+	var MapEditScene  = __webpack_require__(25);
+	var Unit          = __webpack_require__(15);
 	var TileData      = __webpack_require__(11);
 
 	var floor_data;
@@ -59,54 +59,46 @@
 	    PageScripts.run();
 
 	    Game.init();
+	    // TODO: make the image assets into a spritesheet
 	    Game.assets
-	        .push({ name: 'tile_placeholder', url: 'images/tile_placeholder.png' },
-	              { name: 'floor',            url: 'images/floor.png' },
-	              { name: 'wall',             url: 'images/wall.png' },
-	              { name: 'unit_placeholder', url: 'images/unit_placeholder.png' },
-	              { name: 'heart',            url: 'images/heart.png' },
-	              { name: 'half_heart',       url: 'images/heart_half.png' },
-	              { name: 'empty_heart',      url: 'images/heart_empty.png' },
-	              { name: 'test_floor',       url: 'data/testFloor.json'} );
+	        .push(
+	          { name: 'test_floor',       url: 'data/testFloor.json'},
+	          { name: 'tile_data',        url: 'data/tileData.json'},
+	          { name: 'tile_placeholder', url: 'images/tile_placeholder.png' },
+	          { name: 'floor',            url: 'images/floor.png' },
+	          { name: 'wall',             url: 'images/wall.png' },
+	          { name: 'unit_placeholder', url: 'images/unit_placeholder.png' },
+	          { name: 'enemy_placeholder', url: 'images/enemy_placeholder.png' },
+	          { name: 'farmer_idle',      url: 'images/farmer_idle.png' },
+	          { name: 'soldier_idle',     url: 'images/soldier_idle.png' },
+	          { name: 'bat_idle',         url: 'images/bat_idle.png' },
+	          { name: 'heart',            url: 'images/heart.png' },
+	          { name: 'half_heart',       url: 'images/heart_half.png' },
+	          { name: 'empty_heart',      url: 'images/heart_empty.png' } );
 
 	    Game.loadAssets(function (loader, resources) {
-	        initTileData();
+	        initTileData(resources.tile_data.data);
 	        // var editor = new MapEditScene();
 	        // Game.loadScene(editor);
 	        var map = new MapScene(resources.test_floor.data);
 	        Game.loadScene(map);
 	        
-	        addUnitsToMap(map);
-
 	        Game.run();
 	      });
 	    
 	  });
 
-	function initTileData() {
-	  // TODO: set these up to store the Texture in each frame 
-	  Game.TileData.floor = {
-	    frames: ['floor'],
-	    properties: {}
-	  };
-
-	  Game.TileData.wall = {
-	    frames: ['wall'],
-	    properties: {
-	      wall: true
+	function initTileData(data) {
+	  for (var i = 0, l = data.types.length; i < l; i++)
+	  {
+	    var type = data.types[i];
+	    Game.TileData[type.name] = {
+	      frames: type.frames,
+	      properties: type.properties ? type.properties : {}
 	    }
-	  };
+	  }
 	}
 
-	function addUnitsToMap(map) {
-	  var unit = new Unit('soldier');
-	  unit.moveTo(10, 9, true);
-	  map.addEntity(unit);
-
-	  var unit = new Unit('farmer');
-	  unit.moveTo(8, 4, true);
-	  map.addEntity(unit);
-	}
 
 /***/ },
 /* 1 */
@@ -354,6 +346,8 @@
 /***/ function(module, exports) {
 
 	
+	// A simple event dispatcher & target
+
 	var EventTarget = function() {
 	  this.listeners = {};
 	};
@@ -410,6 +404,8 @@
 	  this.showing = [];
 	  
 	  PIXI.Container.call(this);  
+	  this.entContainer = new PIXI.Container();
+	  this.addChild(this.entContainer);
 	}
 
 	Scene.prototype = Object.create(PIXI.Container.prototype);
@@ -446,7 +442,7 @@
 	  if (! this.entities[ent.entType]) 
 	    this.entities[ent.entType] = [];
 	  this.entities[ent.entType].push(ent);
-	  this.addChild(ent.sprite);
+	  this.entContainer.addChild(ent.sprite);
 	  return true;
 	}
 
@@ -982,7 +978,11 @@
 	var Keyboard = __webpack_require__(8);
 	var Scene = __webpack_require__(5);
 	var TileMap = __webpack_require__(9);
-	var MoveRangeSprite = __webpack_require__(13);
+	var RangeSprite = __webpack_require__(13);
+	var TargetInfoScene = __webpack_require__(14);
+	var Unit = __webpack_require__(15);
+	var Soil = __webpack_require__(21);
+	var Plant = __webpack_require__(23);
 
 	var MapScene = function (floorData) {
 	  if (floorData === undefined) floorData = { name: 'test', w: 200, h: 100 };
@@ -990,26 +990,13 @@
 	  this.moveRangeSprite = null;
 	  Scene.call(this, floorData.name);
 
-	  this.tilemap = new TileMap(floorData.w, floorData.h);
-	  if (floorData.tiles && floorData.tiles.length > 0)
-	  {
-	    for (var i = 0, l = floorData.tiles.length; i < l; i++)
-	    {
-	      var v = floorData.tiles[i];
-	      var type = floorData.types[v];
-	      if (type)
-	      {
-	        var x = i % floorData.w;
-	        var y = Math.floor(i / floorData.w);
-	        this.tilemap.tileType = type;
-	        this.tilemap.setTile(x, y, v);
-	      }
-	    }
-	  }
+	  setupContainers(this);
 
-	  this.addEntity(this.tilemap);
-	  this.moveRangeSprite = createMoveRangeSprite(this);
-	  this.addChild(this.moveRangeSprite);
+	  loadTilemap(this, floorData);
+	  loadOther(this, floorData);
+	  loadUI(this);
+	  loadUnits(this, floorData);
+	  
 	}
 
 	MapScene.prototype = Object.create(Scene.prototype);
@@ -1017,6 +1004,14 @@
 
 	Object.defineProperty(MapScene.prototype, 'units', {
 	  get: function () { return this.entities.Unit; }
+	});
+
+	Object.defineProperty(MapScene.prototype, 'enemies', {
+	  get: function () { return this.entities.Enemy; }
+	});
+
+	Object.defineProperty(MapScene.prototype, 'plants', {
+	  get: function () { return this.entities.Plant; }
 	});
 
 
@@ -1027,36 +1022,9 @@
 
 	  if (this.selectedUnit)
 	  { 
-	    xx = this.selectedUnit.tileX;
-	    yy = this.selectedUnit.tileY;
-
-	    if (Game.Input.keyReleased(Keyboard.W))
-	    {
-	      if (this.inRange(xx, yy - 1))
-	        this.selectedUnit.moveTo(xx, yy - 1);
-	    } 
-	    else if (Game.Input.keyReleased(Keyboard.S)) 
-	    {
-	      if (this.inRange(xx, yy + 1))
-	        this.selectedUnit.moveTo(xx, yy + 1);
-	    }
-	    if (Game.Input.keyReleased(Keyboard.A)) 
-	    {
-	      if (this.inRange(xx - 1, yy))
-	        this.selectedUnit.moveTo(xx - 1, yy);
-	    }
-	    else if (Game.Input.keyReleased(Keyboard.D))
-	    {
-	      if (this.inRange(xx + 1, yy))
-	        this.selectedUnit.moveTo(xx + 1, yy);
-	    }
-
-	    if (Game.Input.mouseDown() || Game.Input.keyDown(Keyboard.SPACE))
-	    {
-	      this.selectedUnit = null;
-	      this.moveRangeSprite.visible = false;
-	    }
+	    selectedUnitInput(this);
 	  }
+	  cameraMoveInput(this);
 	}
 
 	MapScene.prototype.inRange = function (x, y) {
@@ -1099,34 +1067,200 @@
 	MapScene.prototype.unitClicked = function (unit) {
 	  this.selectedUnit = unit;
 	  this.moveRangeSprite.visible = true;
-	  var range = this.selectedUnit.move_range ? this.selectedUnit.move_range : 5;
-	  this.moveRangeSprite.drawUnitsRange(this.selectedUnit, range);
+	  var range = this.selectedUnit.stats.move_range ? this.selectedUnit.stats.move_range : 5;
+	  this.moveRangeSprite.drawUnitsRange(this.selectedUnit, 0, range);
 	}
 
+
+	MapScene.prototype.addEntity = function (ent, layer) {
+	  if (Number.isInteger(ent)) ent = Game.getEntity(ent);
+	  ent.scene = this;
+	  if (! this.entities[ent.entType]) 
+	    this.entities[ent.entType] = [];
+	  this.entities[ent.entType].push(ent);
+	  
+	  if (layer === undefined) layer = ent.entType;
+	  this.containers[layer].addChild(ent.sprite); // changed from the Scene.addEntity
+	  // this.entContainer.addChild(ent.sprite); 
+	  return true;
+	}
+
+
+	// Private methods
+
+	function setupContainers(scene)
+	{
+	  scene.containers = {};
+	  scene.containers['Background']  = new PIXI.Container();
+	  scene.containers['Soil']        = new PIXI.Container();
+	  scene.containers['BelowUnits']  = new PIXI.Container();
+	  scene.containers['Plant']       = new PIXI.Container();
+	  scene.containers['Unit']        = new PIXI.Container();
+
+	  scene.addChild(scene.containers['Background']);
+	  scene.addChild(scene.containers['Soil']);
+	  scene.addChild(scene.containers['BelowUnits']);
+	  scene.addChild(scene.containers['Plant']);
+	  scene.addChild(scene.containers['Unit']);
+	}
+
+
+	function loadTilemap(scene, data)
+	{
+	  scene.tilemap = new TileMap(data.w, data.h);
+	  if (data.tiles && data.tiles.length > 0)
+	  {
+	    for (var i = 0, l = data.tiles.length; i < l; i++)
+	    {
+	      var v = data.tiles[i];
+	      var type = data.types[v];
+	      if (type)
+	      {
+	        var x = i % data.w;
+	        var y = Math.floor(i / data.w);
+	        scene.tilemap.tileType = type;
+	        scene.tilemap.setTile(x, y, v);
+	      }
+	    }
+	  }
+
+	  scene.addEntity(scene.tilemap, 'Background');
+	}
+
+	function loadUnits(scene, data)
+	{
+	  if (! data.units) return;
+	  var u, unit;
+	  for (var i = 0, l = data.units.length; i < l; i++)
+	  {
+	    u = data.units[i];
+	    unit = new Unit(u.type);
+	    unit.moveTo(u.x, u.y, true);
+	    scene.addEntity(unit);
+	  }
+	}
+
+	function loadOther(scene, data)
+	{
+	  if (! data.other) return;
+	  var d, ent;
+	  for (var i = 0, l = data.other.length; i < l; i++)
+	  {
+	    d = data.other[i];
+	    switch (d.entType)
+	    {
+	      case "Soil":
+	        addSoil(scene, d);
+	        break;
+	    }
+	  }
+	}
+
+	function addSoil(scene, data)
+	{
+	  var soil = new Soil(data.type);
+
+	  soil.tileX = data.x;
+	  soil.tileY = data.y;
+	  if (data.state)
+	    soil.state = data.state;
+
+	  scene.addEntity(soil);
+
+	  // if the soil has plant data
+	  if (data.plant)
+	  {
+	    var plant = new Plant(data.plant.type);
+	    
+	    if (data.plant.state)
+	      plant.state = data.plant.state;
+
+	    scene.addEntity(plant);
+	    plant.plant(soil);
+	  }
+	}
+
+	function loadUI(scene)
+	{
+	  scene.targetUI = new TargetInfoScene();
+	  scene.targetUI.x = Game.props.stage_width - scene.targetUI.width;
+	  scene.addScene(scene.targetUI, true);
+
+	  scene.moveRangeSprite = createRangeSprite(scene);
+	  scene.containers['BelowUnits'].addChild(scene.moveRangeSprite);
+	}
 
 	function getTileX(x) {
 	  var tw = Game.properties['tile_width'];
 	  return Math.floor(x / tw);
 	}
 
-
 	function getTileY(y) {
 	  var th = Game.properties['tile_height'];
 	  return Math.floor(y / th);
 	}
 
-
-	function createMoveRangeSprite(map) {
-	  var g = new MoveRangeSprite(map);
+	function createRangeSprite(map) {
+	  var g = new RangeSprite(map);
 	  g.visible = false;
 	  return g;
 	}
-
 
 	function testTileIsGround(tile) {
 	  if (tile == null) return false;
 	  if (tile.hasProperty('wall') || tile.hasProperty('hole')) return false;
 	  return true;
+	}
+
+	function selectedUnitInput(scene) {
+	  xx = scene.selectedUnit.tileX;
+	  yy = scene.selectedUnit.tileY;
+
+	  if (Game.Input.keyReleased(Keyboard.W))
+	  {
+	    if (scene.inRange(xx, yy - 1))
+	      scene.selectedUnit.moveTo(xx, yy - 1);
+	  } 
+	  else if (Game.Input.keyReleased(Keyboard.S)) 
+	  {
+	    if (scene.inRange(xx, yy + 1))
+	      scene.selectedUnit.moveTo(xx, yy + 1);
+	  }
+	  if (Game.Input.keyReleased(Keyboard.A)) 
+	  {
+	    if (scene.inRange(xx - 1, yy))
+	      scene.selectedUnit.moveTo(xx - 1, yy);
+	  }
+	  else if (Game.Input.keyReleased(Keyboard.D))
+	  {
+	    if (scene.inRange(xx + 1, yy))
+	      scene.selectedUnit.moveTo(xx + 1, yy);
+	  }
+
+	  if (Game.Input.mouseDown() || Game.Input.keyDown(Keyboard.SPACE))
+	  {
+	    scene.selectedUnit = null;
+	    scene.moveRangeSprite.visible = false;
+	  }
+	}
+
+	function cameraMoveInput(scene) {
+	  if (Game.Input.keyDown(Keyboard.UP)) 
+	  {
+	    scene.entContainer.y += 2;
+	  }
+	  else if (Game.Input.keyDown(Keyboard.DOWN))
+	  {
+	    scene.entContainer.y -= 2;
+	  }
+	  if (Game.Input.keyDown(Keyboard.LEFT)) 
+	  {
+	    scene.entContainer.x += 2;
+	  }
+	  else if (Game.Input.keyDown(Keyboard.RIGHT))
+	  {
+	    scene.entContainer.x -= 2; 
+	  }
 	}
 
 
@@ -1140,44 +1274,65 @@
 	
 	var directions = [[-1, 0], [0, -1], [1, 0], [0, 1]];
 
-	var MoveRangeSprite = function (map) {
+	var RangeSprite = function (map) {
 	  this.tiles = [];
 	  this.map = map;
+	  this.draw = {
+	    color: 0x6fff6f,
+	    alpha: 0.8
+	  };
 	  PIXI.Graphics.call(this);
 	}
 
-	MoveRangeSprite.prototype = Object.create(PIXI.Graphics.prototype);
-	MoveRangeSprite.prototype.constructor = MoveRangeSprite;
+	RangeSprite.prototype = Object.create(PIXI.Graphics.prototype);
+	RangeSprite.prototype.constructor = RangeSprite;
 
-	MoveRangeSprite.prototype.clearTiles = function () {
+	RangeSprite.prototype.clearTiles = function () {
 	  this.tiles.length = 0;
 	}
 
-	MoveRangeSprite.prototype.drawUnitsRange = function (unit, range) {
+	// TODO: improve this to support drawing ranges with min and max values
+	RangeSprite.prototype.drawUnitsRange = function (unit, min, max, before, after) {
+	  var map = this.map;
 	  this.clearTiles();
-	  console.log('drawRangeStart');
 	  this.clear();
-	  this.beginFill(0x009900, 0.5);
-	  this.drawTile(unit, unit.tileX, unit.tileY, 0, range);
-	  this.endFill();
-	  console.log('drawRangeEnd');
+	  if (before === undefined)
+	    this.lineStyle(1, this.draw.color, this.draw.alpha);
+	  else
+	    before(this)
+	  
+	  if (min != 0)
+	  {
+	    this.addTiles(unit, unit.tileX, unit.tileY, 0, min, function (x, y) { return map.canUnitMoveHere(unit, x, y); }, false);
+	  }
+	  this.addTiles(unit, unit.tileX, unit.tileY, min, max, function (x, y) { return map.canUnitMoveHere(unit, x, y); });
+
+	  if (after === undefined)
+	  {
+	    // this.endFill();
+	  }
+	  else
+	    after(this)
 	}
 
-	MoveRangeSprite.prototype.drawTile = function (unit, x, y, r, max_r) {
+	RangeSprite.prototype.addTiles = function (unit, x, y, r, max_r, check, draw) {
 	  var d = 0, dir = null, xx = x, yy = y, l = directions.length;
+	  if (draw === undefined) draw = true;
 
 	  if (r >= max_r) return;
-	  if (! this.map.canUnitMoveHere(unit, xx, yy)) return;
+	  if (! check(x, y)) return;
 	  
 	  while (d < l) {
 	    dir = directions[d];
 	    xx = x + dir[0];
 	    yy = y + dir[1];
-	    this.drawTile(unit, xx, yy, r+1, max_r);
+	    this.addTiles(unit, xx, yy, r+1, max_r, check);
 	    d++;
 	  }
 	  if (this.tiles.findIndex(function (elm) { return elm.x == x && elm.y == y; }) != -1) return;
-	  drawRect(this, x, y);
+	  if (draw)
+	    drawRect(this, x, y);
+
 	  this.tiles.push({x: x, y: y});
 	}
 
@@ -1196,15 +1351,692 @@
 	  g.drawRect(xx, yy, w, h);
 	}
 
-	module.exports = MoveRangeSprite;
+	module.exports = RangeSprite;
 
 
 /***/ },
 /* 14 */
 /***/ function(module, exports, __webpack_require__) {
 
+	var Scene = __webpack_require__(5);
+
+	var TARGET_UI = {
+	  WIDTH: 128,
+	  BG_COLOR: 0xeeeeee,
+	}
+
+	var TargetInfoScene = function ()
+	{
+	  this._selectedEntity = null;
+	  Scene.call(this, 'TargetUI');
+	  initUI(this);
+	}
+
+	TargetInfoScene.prototype = Object.create(Scene.prototype);
+	TargetInfoScene.prototype.constructor = TargetInfoScene;
+
+	Object.defineProperty(TargetInfoScene.prototype, 'selectedEntity', {
+	  get: function () { return this._selectedEntity; },
+	  set: function (val) {
+	    this._selectedEntity = val;
+	    selectedEntityChanged(this, val);
+	  }
+	});
+
+
+	function initUI(scene) 
+	{
+	  // create the background
+	  var g = scene._background = new PIXI.Graphics();
+	  g.beginFill(TARGET_UI.BG_COLOR, 1);
+	  g.drawRect(0, 0, TARGET_UI.WIDTH, Game.props.stage_height);
+	  g.endFill();
+	  scene.addChild(scene._background);
+	}
+
+	function selectedEntityChanged(scene, entity) 
+	{
+	  if (entity == null)
+	  {
+	    return;
+	  }
+	  var type = entity.entType;
+	}
+
+	module.exports = TargetInfoScene;
+
+
+/***/ },
+/* 15 */
+/***/ function(module, exports, __webpack_require__) {
+
+	var UnitData     = __webpack_require__(16);
+	var Actor        = __webpack_require__(17);
+
+	var UNIT_OFFSET = {x: 0, y: 8};
+
+	// Extends Entity
+	var Unit = function (type) {
+
+	  this.type  = type;
+	  
+	  var sprite = makeSprite(this);
+	  Actor.call(this, 'Unit', sprite);
+	}
+
+	Unit.prototype = Object.create(Actor.prototype);
+	Unit.prototype.constructor = Unit;
+
+	// Properties
+
+
+	// Methods
+
+	Unit.prototype.initialize = function () 
+	{
+	  loadStats(this);
+
+	  this.offset.x = UNIT_OFFSET.x;
+	  this.offset.y = UNIT_OFFSET.y;
+	  
+	  this.sprite.interactive = true;
+	  this.sprite.on('click', onClick, this);
+	  this.sprite.on('touchstart', onClick, this);
+
+	  Actor.prototype.initialize.call(this);
+	}
+
+	// Private Methods
+
+	function loadStats(unit) 
+	{
+	  var type = unit.type, stats;
+	  if (! UnitData.hasOwnProperty(type))
+	    type = 'default';
+	  var stats = UnitData[type].stats;
+	  unit.stats = {};
+	  for (var k in stats)
+	    unit.stats[k] = stats[k];
+	}
+
+	function makeSprite(unit)
+	{
+	  var type = unit.type, frame;
+	  if (! UnitData.hasOwnProperty(type))
+	    type = 'default';
+	  frame = getFrame(type, 'idle', 0);
+	  return PIXI.Sprite.fromFrame(frame);
+	}
+
+	// TODO: do some error handling maybe??
+	function getFrame(type, state, index) 
+	{
+	  return UnitData[type].frames[state][index];
+	}
+
+	function onClick(e)
+	{
+	  if (this.scene && typeof this.scene.unitClicked == 'function')
+	    this.scene.unitClicked(this);
+	}
+
+
+	module.exports = Unit;
+
+
+/***/ },
+/* 16 */
+/***/ function(module, exports) {
+
+	var UnitData = {
+
+	  states: ['idle'],
+
+	  default: {
+	    frames: {
+	      idle: ['unit_placeholder']
+	    }
+	  },
+
+	  farmer: {
+	    frames: {
+	      idle: ['farmer_idle'],
+	    },
+	    stats: {
+	      max_health: 2,
+	      move_range: 6,
+	      attack_range: 1  
+	    }
+	  },
+
+	  soldier: {
+	    frames: {
+	      idle: ['soldier_idle'],
+	    },
+	    stats: {
+	      max_health: 3,
+	      move_range: 5,
+	      attack_range: 2  
+	    }
+	  },
+
+	  archer: {
+	    frames: {
+	      idle: ['unit_placeholder'],
+	    },
+	    stats: {
+	      max_health: 2,
+	      move_range: 4,
+	      attack_range: 4  
+	    }
+	  },
+
+	  lumberjack: {
+	    frames: {
+	      idle: ['unit_placeholder'],
+	    },
+	    stats: {
+	      max_health: 4,
+	      move_range: 5,
+	      attack_range: 1  
+	    }
+	  },
+
+	};
+
+	module.exports = UnitData;
+
+
+/***/ },
+/* 17 */
+/***/ function(module, exports, __webpack_require__) {
+
+	var HealthSprite = __webpack_require__(18);
+	var Entity       = __webpack_require__(19);
+	var ACTOR_STATES = __webpack_require__(20);
+
+	// Extends Entity
+	var Actor = function (entType, sprite) {
+	  
+	  this._state = ACTOR_STATES.IDLE;
+	  this._behaviour = 'wait';
+	  this._destination = new PIXI.Point(0,0);
+	  this.animation = null;
+	  Entity.call(this, entType, sprite)
+
+	  this.initialize();
+	}
+
+	Actor.prototype = Object.create(Entity.prototype);
+	Actor.prototype.constructor = Actor;
+
+	// Properties
+
+	Object.defineProperty(Actor.prototype, 'state', {
+	  get: function ()    { return this._state; },
+	  set: function (val) { this._state = val; this.setAnimation(); }
+	});
+
+	Object.defineProperty(Actor.prototype, 'hasDestination', {
+	  get: function ()    { return this.xx != this._destination.x || this.yy != this._destination.y; }
+	})
+
+	// Methods
+
+	Actor.prototype.initialize = function () {
+
+	  Entity.prototype.initialize.call(this);
+
+	  // create and show the health
+	  this.healthSprite = makeHealthSprite(this);
+	  this.sprite.addChild(this.healthSprite);
+	}
+
+	Actor.prototype.update = function () { 
+	  if (! this.hasDestination) return;
+	  
+	  this.xx = lerpMovement(this.xx, this._destination.x, Game.properties.tile_width);
+	  this.yy = lerpMovement(this.yy, this._destination.y, Game.properties.tile_height);
+	}
+
+	Actor.prototype.setAnimation = function () {
+	  this.animation = null;
+	}
+
+	// Move to Tile Position
+	Actor.prototype.moveTo = function (x, y, immediate) { 
+	  if (immediate === undefined) immediate = false;
+	  
+	  if (immediate)
+	  {
+	    setPosition(this, x, y);
+	  }
+	  else
+	  {
+	    setDestination(this, x, y);
+	  }
+	}
+
+	// Private Methods
+
+	function lerpMovement(cur, dest, size)
+	{
+	  var dif, t;
+	  dif = dest - cur;
+	  if (dif == 0) return cur;
+	  t = Math.abs(1 / (dif / size)) * 0.25;
+	  return Math.floor(cur + t * dif);
+	}
+
+
+	function makeHealthSprite(unit)
+	{
+	  var hearts = unit.stats && unit.stats.max_health ? unit.stats.max_health : 2;
+	  var s = new HealthSprite(hearts);
+	  s.y = unit.y - unit.sprite.height - 32;
+	  return s;
+	}
+
+
+	function setPosition(unit, tileX, tileY)
+	{
+	  unit.xx = unit._destination.x = tileX * Game.properties.tile_width;
+	  unit.yy = unit._destination.y = tileY * Game.properties.tile_height;
+	}
+
+
+	function setDestination(unit, tileX, tileY)
+	{
+	  unit._destination.x = tileX * Game.properties.tile_width;
+	  unit._destination.y = tileY * Game.properties.tile_height;
+	}
+
+	module.exports = Actor;
+
+
+/***/ },
+/* 18 */
+/***/ function(module, exports) {
+
+	
+	var HealthSprite = function (hearts)
+	{
+	  this.max_health = hearts;
+	  this.cur_health = hearts * 2; // half values
+	  this.sprites = [];
+	  PIXI.Container.call(this);
+	  createSprites(this);
+	  // this.x = -(this.width * 0.5);
+	}
+
+	HealthSprite.prototype = Object.create(PIXI.Container.prototype);
+	HealthSprite.prototype.constructor = HealthSprite;
+
+	HealthSprite.prototype.changeValue = function (count) {
+
+
+
+	}
+
+	function createSprites(s) {
+
+	  var count = s.max_health;
+
+	  for (var i = 0, l = count; i < l; i++)
+	  {
+	    var sprite = PIXI.Sprite.fromFrame('heart');
+	    sprite.anchor.x = 0.5;
+	    sprite.anchor.y = 0.5;
+	    var offset = (i - ((l - 1) * 0.5));
+	    sprite.x = (offset * sprite.width);
+	    s.sprites.push(sprite);
+	    s.addChild(sprite);
+	  }
+	}
+
+	module.exports = HealthSprite;
+
+
+/***/ },
+/* 19 */
+/***/ function(module, exports, __webpack_require__) {
+
+	var Entity       = __webpack_require__(6);
+
+	// Extends Entity
+	var TileEntity = function (entType, sprite) {
+	  
+	  this.offset = new PIXI.Point(0,0);
+	  Entity.call(this, entType, sprite)
+	  this.initialize();
+	}
+
+	TileEntity.prototype = Object.create(Entity.prototype);
+	TileEntity.prototype.constructor = TileEntity;
+
+	// Properties
+	// 
+	// Top Left position
+	Object.defineProperty(TileEntity.prototype, 'xx', {
+	  get: function ()    { return this.x - (this.sprite.anchor.x * Game.props.tile_width ) + this.offset.x; },
+	  set: function (val) { this.x = val +  (this.sprite.anchor.x * Game.props.tile_width ) - this.offset.x; }
+	});
+	Object.defineProperty(TileEntity.prototype, 'yy', {
+	  get: function ()    { return this.y - (this.sprite.anchor.y * Game.props.tile_height ) + this.offset.y; },
+	  set: function (val) { this.y = val +  (this.sprite.anchor.y * Game.props.tile_height ) - this.offset.y; }
+	});
+
+	// Tile Position
+	Object.defineProperty(TileEntity.prototype, 'tileX', {
+	  get: function ()    { return Math.floor(this.xx / Game.props.tile_width); },
+	  set: function (val) { this.xx = val * Game.props.tile_width; }
+	})
+	Object.defineProperty(TileEntity.prototype, 'tileY', {
+	  get: function ()    { return Math.floor(this.yy / Game.props.tile_height); },
+	  set: function (val) { this.yy = val * Game.props.tile_height; }
+	});
+
+	// Methods
+
+	TileEntity.prototype.initialize = function () {
+	  // set the sprites anchor & initial position
+	  this.sprite.anchor.x = 0.5;
+	  this.sprite.anchor.y = 1;
+	  this.sprite.x = (Game.props.tile_width  * this.sprite.anchor.x) - this.offset.x;
+	  this.sprite.y = (Game.props.tile_height * this.sprite.anchor.y) - this.offset.y;
+	}
+
+	module.exports = TileEntity;
+
+
+/***/ },
+/* 20 */
+/***/ function(module, exports) {
+
+	
+	var ActorStates = {
+	  IDLE: 'idle'
+	};
+
+	module.exports = ActorStates;
+
+
+/***/ },
+/* 21 */
+/***/ function(module, exports, __webpack_require__) {
+
+	var SoilData     = __webpack_require__(22);
+	var Entity       = __webpack_require__(19);
+
+	// Extends Entity
+	var Soil = function (type) {
+
+	  this.type = type;
+	  this._state = 'none';
+	  this.water = 0;
+	  this.plant = null;
+
+	  var sprite = makeSprite(this);
+	  Entity.call(this, 'Soil', sprite)
+	}
+
+	Soil.prototype = Object.create(Entity.prototype);
+	Soil.prototype.constructor = Soil;
+
+	// Properties
+
+	Object.defineProperty(Soil.prototype, 'state', {
+	  get: function ()    { return this._state; },
+	  set: function (val) { 
+	    if (this._state == val) return;
+	    if (SoilData.states.indexOf(val) < 0) return;
+	    this._state = val; 
+	    stateChanged(this); 
+	  }
+	});
+
+	Object.defineProperty(Soil.prototype, 'hasPlant', {
+	  get: function () { return this.plant != null; }
+	}) 
+
+	// Methods
+
+	Soil.prototype.update = function ()
+	{
+	  if (this.hasPlant)
+	  {
+	    if (this.plant.needsWater)
+	    {
+	      this.water--;
+	      this.plant.water();
+	    }
+	  }
+	  checkState(this);
+	}
+
+
+	// Private methods
+
+	function checkState(soil)
+	{
+	  soil.state = SoilData.getState(soil);
+	}
+
+	function stateChanged(soil)
+	{
+	  var frame = SoilData.getFrame(soil),
+	      texture = utils.TextureCache[frame];
+
+	  if (! texture) return;
+
+	  soil.sprite.texture = texture;
+	}
+
+	function makeSprite(soil)
+	{
+	  var frame = SoilData.getFrame(soil);
+	  return PIXI.Sprite.fromFrame(frame);
+	}
+
+
+
+	module.exports = Soil;
+
+
+/***/ },
+/* 22 */
+/***/ function(module, exports) {
+
+	var SoilData = {
+
+	  MIN_WATER_LEVEL: 10,
+	  states: ['none', 'dry', 'wet'],
+	  frames: ['tile_placeholder', 'tile_placeholder', 'tile_placeholder'],
+	  getState: function (soil) {
+	    if (soil.water > SoilData.MIN_WATER_LEVEL)
+	      return 'wet';
+	    return soil.tilled ? 'dry' : 'none';
+	  },
+	  getFrame: function (soil) {
+	    var frameId = SoilData.states.indexOf(soil.state);
+	    return SoilData.frames[frameId];
+	  }
+
+	};
+
+	module.exports = SoilData;
+
+
+/***/ },
+/* 23 */
+/***/ function(module, exports, __webpack_require__) {
+
+	var PlantData     = __webpack_require__(24);
+	var Entity        = __webpack_require__(19);
+
+	// Extends Entity
+	var Plant = function (type) {
+
+	  this.type = type;
+	  this._state = 'none';
+	  this._stateIndex = 0;
+	  this.water = 0;
+	  this.growth = 0;
+	  this.plantedIn = null; // Soil
+
+	  var sprite = makeSprite(this);
+	  Entity.call(this, 'Plant', sprite)
+	}
+
+	Plant.prototype = Object.create(Entity.prototype);
+	Plant.prototype.constructor = Plant;
+
+	// Properites
+
+	Object.defineProperty(Plant.prototype, 'state', {
+	  get: function () { return this._state; },
+	  set: function (val) {
+	    if (this._state == val) return;
+	    if (PlantData[this.type].states.indexOf(val) < 0) return;
+	    this._state = val;
+	    stateChanged(this);
+	  }
+	})
+
+	Object.defineProperty(Plant.prototype, 'stateIndex', {
+	  get: function () { return this._stateIndex; }
+	})
+
+	Object.defineProperty(Plant.prototype, 'needsWater', {
+	  get: function () { return this.water < this.props.getsThirstyAt[this.stateIndex]; }
+	}) 
+
+	Object.defineProperty(Plant.prototype, 'hasWater', {
+	  get: function () { return this.water > 0; }
+	}) 
+
+	// Methods
+
+	Plant.prototype.update = function ()
+	{
+	  if (this.plantedIn == null)
+	    return;
+
+
+	  if (this.hasWater)
+	  {
+	    this.water -= this.props.waterUsedPerTick[this.stateIndex];
+	    drink(this);
+	  }
+	}
+
+	Plant.prototype.plant = function (soil)
+	{
+	  soil.plant = this;
+	  this.plantedIn = soil;
+	  this.state = 'seed';
+	  this.tileX = soil.tileX;
+	  this.tileY = soil.tileY;
+	}
+
+	Plant.prototype.initialize = function ()
+	{
+	  initProps(this);
+	}
+
+	Plant.prototype.water = function ()
+	{
+	  this.water = 100;
+	}
+
+	// Private methods
+
+	function drink(plant)
+	{
+	  plant.growth += plant.props.growthPerDrink[plant.stateIndex];
+	  growthChanged(plant);
+	}
+
+	function growthChanged(plant)
+	{
+	  var curState = plant.state,
+	      state = PlantData[plant.type].getStateFromGrowth(plant.growth);
+
+	  if (curState != state) {
+	    plant.state = state;
+	  }
+	}
+
+	function stateChanged(plant)
+	{
+	  var type = plant.type,
+	      state = plant._state,
+	      data = PlantData[type];
+	  // update the stateIndex
+	  plant._stateIndex = data.states.indexOf(state);
+	  // update the texture
+	  var frame = data.frames[plant.stateIndex];
+	  plant.sprite.texture = PIXI.utils.TextureCache[frame];
+	}
+
+	function initProps(plant)
+	{
+	  var type, props;
+	  type = plant.type;
+	  if (! PlantData.hasOwnProperty(type))
+	    type = 'default';
+	  plant.props = {};
+	  props = PlantData[type].props;
+	  for (var k in props)
+	    plant.props[k] = props[k];
+	}
+
+	function makeSprite(plant)
+	{
+	  var type, frame;
+	  type = plant.type;
+	  if (! PlantData.hasOwnProperty(type))
+	    type = 'default';
+	  frame = PlantData[type].frames[0];
+	  return PIXI.Sprite.fromFrame(frame);
+	}
+
+	module.exports = Plant;
+
+
+/***/ },
+/* 24 */
+/***/ function(module, exports) {
+
+	var PlantData = {
+
+	  types: ['default', 'peas'],
+	  default: {
+	    states: ['none'],
+	    frames: ['tile_placeholder'],
+	    props: {}
+	  },
+	  peas: {
+	    states: ['seed', 'sprout', 'vine', 'bud', 'hasPods'],
+	    frames: ['tile_placeholder', 'tile_placeholder', 'tile_placeholder', 'tile_placeholder', 'tile_placeholder'],
+	    props: {
+	      waterUsedPerTick: [5, 3, 3, 2, 0],
+	      growthPerDrink:   [1, 3, 2, 2, 0],
+	      growthStateMap:   [0, 10, 40, 60, 100]
+	    }
+	  }
+
+	};
+
+	module.exports = PlantData;
+
+
+/***/ },
+/* 25 */
+/***/ function(module, exports, __webpack_require__) {
+
 	var MapScene    = __webpack_require__(12);
-	var EditStates  = __webpack_require__(15);
+	var EditStates  = __webpack_require__(26);
 
 	var MapEditScene = function () {
 	  var w, h, width, height;
@@ -1256,7 +2088,7 @@
 
 
 /***/ },
-/* 15 */
+/* 26 */
 /***/ function(module, exports) {
 
 	
@@ -1266,289 +2098,6 @@
 	}
 
 	module.exports = EditStates;
-
-
-/***/ },
-/* 16 */
-/***/ function(module, exports, __webpack_require__) {
-
-	var UnitFrames   = __webpack_require__(17);
-	var UnitStats    = __webpack_require__(18);
-	var Actor        = __webpack_require__(19);
-
-	// Extends Entity
-	var Unit = function (type) {
-
-	  this.type         = type;
-	  this._textures    = getUnitTypeTextures(this.type);
-	  var sprite = makeUnitSprite(this);
-	  this.initStats();
-	  Actor.call(this, 'Unit', sprite);
-	}
-
-	Unit.prototype = Object.create(Actor.prototype);
-	Unit.prototype.constructor = Unit;
-
-	Unit.prototype.initStats = function ()
-	{
-	  var stats = UnitStats[this.type];
-	  for (var k in stats)
-	    this[k] = stats[k];
-	}
-
-	Unit.prototype.initSprites = function () 
-	{
-	  this.offset.y = 8;
-	  
-	  this.sprite.interactive = true;
-	  this.sprite.on('click', onClick, this);
-	  this.sprite.on('touchstart', onClick, this);
-
-	  Actor.prototype.initSprites.call(this);
-	}
-
-
-	function getUnitTypeTextures(type)
-	{
-	  if (! UnitFrames.hasOwnProperty(type))
-	    type = 'default';
-
-	  return UnitFrames[type];
-	}
-
-	// TODO: support animations
-	function makeUnitSprite(unit)
-	{
-	  return PIXI.Sprite.fromFrame(unit._textures['idle']);
-	}
-
-
-	function onClick(e)
-	{
-	  if (this.scene && typeof this.scene.unitClicked == 'function')
-	    this.scene.unitClicked(this);
-	}
-
-
-	module.exports = Unit;
-
-
-/***/ },
-/* 17 */
-/***/ function(module, exports) {
-
-	var UnitFrames = {};
-
-	UnitFrames['default'] = { 'idle': 'unit_placeholder' };
-
-	module.exports = UnitFrames;
-
-
-/***/ },
-/* 18 */
-/***/ function(module, exports) {
-
-	var UnitStats = {
-
-	  'farmer': {
-	    'max_health': 2,
-	    'move_range': 6,
-	    'attack_range': 1
-	  },
-	  'soldier': {
-	    'max_health': 3,
-	    'move_range': 5,
-	    'attack_range': 2
-	  },
-	  'archer': {
-	    'max_health': 2,
-	    'move_range': 4,
-	    'attack_range': 4
-	  },
-	  'lumberjack': {
-	    'max_health': 4,
-	    'move_range': 5,
-	    'attack_range': 1
-	  }
-
-	};
-
-
-
-	module.exports = UnitStats;
-
-/***/ },
-/* 19 */
-/***/ function(module, exports, __webpack_require__) {
-
-	var HealthSprite = __webpack_require__(20);
-	var Entity       = __webpack_require__(6);
-	var ACTOR_STATES = __webpack_require__(21);
-
-	// Extends Entity
-	var Actor = function (entType, sprite) {
-	  
-	  this._state = ACTOR_STATES.IDLE;
-	  this._destination = new PIXI.Point(0,0);
-	  this.offset = new PIXI.Point(0,0);
-
-	  Entity.call(this, entType, sprite)
-
-	  this.initSprites();
-	}
-
-	Actor.prototype = Object.create(Entity.prototype);
-	Actor.prototype.constructor = Actor;
-
-	Object.defineProperty(Actor.prototype, 'state', {
-	  get: function ()    { return this._state; },
-	  set: function (val) {
-	    this._state = val;
-	    this.setAnimation();
-	  }
-	});
-
-	// Top Left position
-	Object.defineProperty(Actor.prototype, 'xx', {
-	  get: function ()    { return this.x - (this.sprite.anchor.x * Game.properties.tile_width ) + this.offset.x; },
-	  set: function (val) { this.x = val +  (this.sprite.anchor.x * Game.properties.tile_width ) - this.offset.x; }
-	});
-	Object.defineProperty(Actor.prototype, 'yy', {
-	  get: function ()    { return this.y - (this.sprite.anchor.y * Game.properties.tile_height ) + this.offset.y; },
-	  set: function (val) { this.y = val +  (this.sprite.anchor.y * Game.properties.tile_height ) - this.offset.y; }
-	});
-
-	// Tile Position
-	Object.defineProperty(Actor.prototype, 'tileX', {
-	  get: function ()    { return Math.floor(this.xx / Game.properties.tile_width); }
-	})
-	Object.defineProperty(Actor.prototype, 'tileY', {
-	  get: function ()    { return Math.floor(this.yy / Game.properties.tile_height); }
-	});
-
-	Object.defineProperty(Actor.prototype, 'hasDestination', {
-	  get: function ()    { return this.xx != this._destination.x || this.yy != this._destination.y; }
-	})
-
-	Actor.prototype.initSprites = function () {
-	  // set the sprites anchor & initial position
-	  this.sprite.anchor.x = 0.5;
-	  this.sprite.anchor.y = 1;
-	  this.sprite.x = (Game.properties.tile_width  * this.sprite.anchor.x) - this.offset.x;
-	  this.sprite.y = (Game.properties.tile_height * this.sprite.anchor.y) - this.offset.y;
-
-	  // create and show the health
-	  this.healthSprite = makeHealthSprite(this);
-	  this.sprite.addChild(this.healthSprite);
-	}
-
-	// Move to Tile Position
-	Actor.prototype.moveTo = function (x, y, immediate) { 
-	  if (immediate === undefined) immediate = false;
-	  
-	  if (immediate)
-	    setPosition(this, x, y);
-	  else
-	    setDestination(this, x, y);
-	}
-
-	Actor.prototype.update = function () { 
-	  if (! this.hasDestination) return;
-	  
-	  this.xx = lerpMovement(this.xx, this._destination.x, Game.properties.tile_width);
-	  this.yy = lerpMovement(this.yy, this._destination.y, Game.properties.tile_height);
-	}
-
-
-
-	function lerpMovement(cur, dest, size)
-	{
-	  var dif, t;
-	  dif = dest - cur;
-	  if (dif == 0) return cur;
-	  t = Math.abs(1 / (dif / size)) * 0.25;
-	  return Math.floor(cur + t * dif);
-	}
-
-
-	function makeHealthSprite(unit)
-	{
-	  var hearts = unit.max_health ? unit.max_health : 2;
-	  var s = new HealthSprite(hearts);
-	  s.y = unit.y - unit.sprite.height - 32;
-	  return s;
-	}
-
-
-	function setPosition(unit, tileX, tileY)
-	{
-	  unit.xx = unit._destination.x = tileX * Game.properties.tile_width;
-	  unit.yy = unit._destination.y = tileY * Game.properties.tile_height;
-	}
-
-
-	function setDestination(unit, tileX, tileY)
-	{
-	  unit._destination.x = tileX * Game.properties.tile_width;
-	  unit._destination.y = tileY * Game.properties.tile_height;
-	}
-
-	module.exports = Actor;
-
-
-/***/ },
-/* 20 */
-/***/ function(module, exports) {
-
-	
-	var HealthSprite = function (hearts)
-	{
-	  this.max_health = hearts;
-	  this.cur_health = hearts * 2; // half values
-	  this.sprites = [];
-	  PIXI.Container.call(this);
-	  createSprites(this);
-	  // this.x = -(this.width * 0.5);
-	}
-
-	HealthSprite.prototype = Object.create(PIXI.Container.prototype);
-	HealthSprite.prototype.constructor = HealthSprite;
-
-	HealthSprite.prototype.changeValue = function (count) {
-
-
-
-	}
-
-	function createSprites(s) {
-
-	  var count = s.max_health;
-
-	  for (var i = 0, l = count; i < l; i++)
-	  {
-	    var sprite = PIXI.Sprite.fromFrame('heart');
-	    sprite.anchor.x = 0.5;
-	    sprite.anchor.y = 0.5;
-	    var offset = (i - ((l - 1) * 0.5));
-	    sprite.x = (offset * sprite.width);
-	    s.sprites.push(sprite);
-	    s.addChild(sprite);
-	  }
-	}
-
-	module.exports = HealthSprite;
-
-
-/***/ },
-/* 21 */
-/***/ function(module, exports) {
-
-	
-	var ActorStates = {
-	  IDLE: 'idle'
-	};
-
-	module.exports = ActorStates;
 
 
 /***/ }

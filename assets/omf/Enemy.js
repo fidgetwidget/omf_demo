@@ -1,31 +1,31 @@
-var UnitData     = require(__dirname+'/UnitData');
+var EnemyData    = require(__dirname+'/EnemyData');
 var Actor        = require(__dirname+'/Actor');
 
-var UNIT_OFFSET = {x: 0, y: 8};
+var ENEMY_OFFSET = {x: 0, y: 8};
 
 // Extends Entity
-var Unit = function (type) {
+var Enemy = function (type) {
 
   this.type  = type;
   
   var sprite = makeSprite(this);
-  Actor.call(this, 'Unit', sprite);
+  Actor.call(this, 'Enemy', sprite);
 }
 
-Unit.prototype = Object.create(Actor.prototype);
-Unit.prototype.constructor = Unit;
+Enemy.prototype = Object.create(Actor.prototype);
+Enemy.prototype.constructor = Enemy;
 
 // Properties
-
+// None
 
 // Methods
 
-Unit.prototype.initialize = function () 
+Enemy.prototype.initialize = function () 
 {
   loadStats(this);
 
-  this.offset.x = UNIT_OFFSET.x;
-  this.offset.y = UNIT_OFFSET.y;
+  this.offset.x = ENEMY_OFFSET.x;
+  this.offset.y = ENEMY_OFFSET.y;
   
   this.sprite.interactive = true;
   this.sprite.on('click', onClick, this);
@@ -39,9 +39,9 @@ Unit.prototype.initialize = function ()
 function loadStats(unit) 
 {
   var type = unit.type, stats;
-  if (! UnitData.hasOwnProperty(type))
+  if (! EnemyData.hasOwnProperty(type))
     type = 'default';
-  var stats = UnitData[type].stats;
+  var stats = EnemyData[type].stats;
   unit.stats = {};
   for (var k in stats)
     unit.stats[k] = stats[k];
@@ -50,7 +50,7 @@ function loadStats(unit)
 function makeSprite(unit)
 {
   var type = unit.type, frame;
-  if (! UnitData.hasOwnProperty(type))
+  if (! EnemyData.hasOwnProperty(type))
     type = 'default';
   frame = getFrame(type, 'idle', 0);
   return PIXI.Sprite.fromFrame(frame);
@@ -59,14 +59,13 @@ function makeSprite(unit)
 // TODO: do some error handling maybe??
 function getFrame(type, state, index) 
 {
-  return UnitData[type].frames[state][index];
+  return EnemyData[type].frames[state][index];
 }
 
 function onClick(e)
 {
-  if (this.scene && typeof this.scene.unitClicked == 'function')
-    this.scene.unitClicked(this);
+  console.log(e.target);
 }
 
 
-module.exports = Unit;
+module.exports = Enemy;

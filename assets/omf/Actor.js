@@ -1,72 +1,42 @@
 var HealthSprite = require(__dirname+'/HealthSprite');
-var Entity       = require(__dirname+'/../game/Entity');
+var Entity       = require(__dirname+'/TileEntity');
 var ACTOR_STATES = require(__dirname+'/ActorStates');
 
 // Extends Entity
 var Actor = function (entType, sprite) {
   
   this._state = ACTOR_STATES.IDLE;
+  this._behaviour = 'wait';
   this._destination = new PIXI.Point(0,0);
-  this.offset = new PIXI.Point(0,0);
-
+  this.animation = null;
   Entity.call(this, entType, sprite)
 
-  this.initSprites();
+  this.initialize();
 }
 
 Actor.prototype = Object.create(Entity.prototype);
 Actor.prototype.constructor = Actor;
 
+// Properties
+
 Object.defineProperty(Actor.prototype, 'state', {
   get: function ()    { return this._state; },
-  set: function (val) {
-    this._state = val;
-    this.setAnimation();
-  }
-});
-
-// Top Left position
-Object.defineProperty(Actor.prototype, 'xx', {
-  get: function ()    { return this.x - (this.sprite.anchor.x * Game.properties.tile_width ) + this.offset.x; },
-  set: function (val) { this.x = val +  (this.sprite.anchor.x * Game.properties.tile_width ) - this.offset.x; }
-});
-Object.defineProperty(Actor.prototype, 'yy', {
-  get: function ()    { return this.y - (this.sprite.anchor.y * Game.properties.tile_height ) + this.offset.y; },
-  set: function (val) { this.y = val +  (this.sprite.anchor.y * Game.properties.tile_height ) - this.offset.y; }
-});
-
-// Tile Position
-Object.defineProperty(Actor.prototype, 'tileX', {
-  get: function ()    { return Math.floor(this.xx / Game.properties.tile_width); }
-})
-Object.defineProperty(Actor.prototype, 'tileY', {
-  get: function ()    { return Math.floor(this.yy / Game.properties.tile_height); }
+  set: function (val) { this._state = val; this.setAnimation(); }
 });
 
 Object.defineProperty(Actor.prototype, 'hasDestination', {
   get: function ()    { return this.xx != this._destination.x || this.yy != this._destination.y; }
 })
 
-Actor.prototype.initSprites = function () {
-  // set the sprites anchor & initial position
-  this.sprite.anchor.x = 0.5;
-  this.sprite.anchor.y = 1;
-  this.sprite.x = (Game.properties.tile_width  * this.sprite.anchor.x) - this.offset.x;
-  this.sprite.y = (Game.properties.tile_height * this.sprite.anchor.y) - this.offset.y;
+// Methods
+
+Actor.prototype.initialize = function () {
+
+  Entity.prototype.initialize.call(this);
 
   // create and show the health
   this.healthSprite = makeHealthSprite(this);
   this.sprite.addChild(this.healthSprite);
-}
-
-// Move to Tile Position
-Actor.prototype.moveTo = function (x, y, immediate) { 
-  if (immediate === undefined) immediate = false;
-  
-  if (immediate)
-    setPosition(this, x, y);
-  else
-    setDestination(this, x, y);
 }
 
 Actor.prototype.update = function () { 
@@ -76,7 +46,25 @@ Actor.prototype.update = function () {
   this.yy = lerpMovement(this.yy, this._destination.y, Game.properties.tile_height);
 }
 
+Actor.prototype.setAnimation = function () {
+  this.animation = null;
+}
 
+// Move to Tile Position
+Actor.prototype.moveTo = function (x, y, immediate) { 
+  if (immediate === undefined) immediate = false;
+  
+  if (immediate)
+  {
+    setPosition(this, x, y);
+  }
+  else
+  {
+    setDestination(this, x, y);
+  }
+}
+
+// Private Methods
 
 function lerpMovement(cur, dest, size)
 {
@@ -90,7 +78,7 @@ function lerpMovement(cur, dest, size)
 
 function makeHealthSprite(unit)
 {
-  var hearts = unit.max_health ? unit.max_health : 2;
+  var hearts = unit.stats && unit.stats.max_health ? unit.stats.max_health : 2;
   var s = new HealthSprite(hearts);
   s.y = unit.y - unit.sprite.height - 32;
   return s;
