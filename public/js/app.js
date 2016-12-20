@@ -47,9 +47,9 @@
 	var PageScripts   = __webpack_require__(1);
 	var Dom           = __webpack_require__(2);
 	var Game          = __webpack_require__(3);
-	var MapScene      = __webpack_require__(12);
-	var MapEditScene  = __webpack_require__(25);
-	var Unit          = __webpack_require__(15);
+	var MapScene      = __webpack_require__(13);
+	var MapEditScene  = __webpack_require__(30);
+	var Unit          = __webpack_require__(20);
 	var TileData      = __webpack_require__(11);
 
 	var floor_data;
@@ -64,39 +64,29 @@
 	        .push(
 	          { name: 'test_floor',       url: 'data/testFloor.json'},
 	          { name: 'tile_data',        url: 'data/tileData.json'},
-	          { name: 'tile_placeholder', url: 'images/tile_placeholder.png' },
-	          { name: 'floor',            url: 'images/floor.png' },
-	          { name: 'wall',             url: 'images/wall.png' },
-	          { name: 'unit_placeholder', url: 'images/unit_placeholder.png' },
-	          { name: 'enemy_placeholder', url: 'images/enemy_placeholder.png' },
-	          { name: 'farmer_idle',      url: 'images/farmer_idle.png' },
-	          { name: 'soldier_idle',     url: 'images/soldier_idle.png' },
-	          { name: 'bat_idle',         url: 'images/bat_idle.png' },
-	          { name: 'heart',            url: 'images/heart.png' },
-	          { name: 'half_heart',       url: 'images/heart_half.png' },
-	          { name: 'empty_heart',      url: 'images/heart_empty.png' } );
+	          { name: 'plant_data',       url: 'data/plantData.json'},
+	          { name: 'images',           url: 'data/imageFiles.json' });
 
 	    Game.loadAssets(function (loader, resources) {
-	        initTileData(resources.tile_data.data);
-	        // var editor = new MapEditScene();
-	        // Game.loadScene(editor);
-	        var map = new MapScene(resources.test_floor.data);
-	        Game.loadScene(map);
-	        
-	        Game.run();
+	        initData(resources);
+
+	        loadImages(resources.images.data.files, function () {
+	          var map = new MapScene(resources.test_floor.data);
+	          Game.loadScene(map);
+	          Game.run();
+	        });        
 	      });
-	    
 	  });
 
-	function initTileData(data) {
-	  for (var i = 0, l = data.types.length; i < l; i++)
-	  {
-	    var type = data.types[i];
-	    Game.TileData[type.name] = {
-	      frames: type.frames,
-	      properties: type.properties ? type.properties : {}
-	    }
-	  }
+
+
+	function initData(resources) {
+	  __webpack_require__(11).load(resources.tile_data);
+	  __webpack_require__(29).load(resources.plant_data);
+	}
+
+	function loadImages(data, cb) {
+	  PIXI.loader.add(data).load(cb)
 	}
 
 
@@ -402,10 +392,10 @@
 	  this.entities = {};
 	  this.scenes  = {};
 	  this.showing = [];
-	  
+	  this.updateables = [];
+
 	  PIXI.Container.call(this);  
-	  this.entContainer = new PIXI.Container();
-	  this.addChild(this.entContainer);
+	  this.containers = {};
 	}
 
 	Scene.prototype = Object.create(PIXI.Container.prototype);
@@ -429,21 +419,41 @@
 	      }
 	    }
 	  }
+
+	  for (var i = 0, l = this.updateables.length; i < l; i++) {
+	    this.updateables[i].update();
+	  }
 	  
 	}
 
 	// Add an entity to the scene, 
 	// and add it's sprite to the container
 	// - supports uid or Entity
-	Scene.prototype.addEntity = function (ent) {
+	Scene.prototype.addEntity = function (ent, layer) {
 	  if (Number.isInteger(ent)) ent = Game.getEntity(ent);
 	  if (! ent instanceof Entity) return false;
+	  
+	  if (layer === undefined) layer = 'Entity';
+	  if (! this.entities[ent.entType]) this.entities[ent.entType] = [];
+	  if (! this.containers[layer]) this.createLayer(layer);
+
 	  ent.scene = this;
-	  if (! this.entities[ent.entType]) 
-	    this.entities[ent.entType] = [];
 	  this.entities[ent.entType].push(ent);
-	  this.entContainer.addChild(ent.sprite);
+
+	  this.addSprite(ent.sprite, layer);
 	  return true;
+	}
+
+	Scene.prototype.addUpdatable = function (obj) {
+	  if (! obj.hasOwnProperty('update')) return false;
+	  this.updateables.push(obj);
+	  return true;
+	}
+
+	Scene.prototype.addSprite = function (sprite, layer) {
+	  if (layer === undefined) layer = 'Sprite';
+	  if (! this.containers[layer]) createLayer(layer);
+	  this.containers[layer].addChild(sprite);
 	}
 
 	// Add a scene to the scene list
@@ -483,6 +493,12 @@
 	  this.removeChild(scene);
 	  this.showing.splice(i, 1);
 	  return true;
+	}
+
+	Scene.prototype.createLayer = function (name) {
+	  var container = new PIXI.Container();
+	  this.containers[name] = container;
+	  this.addChild(container);
 	}
 
 
@@ -953,15 +969,11 @@
 
 /***/ },
 /* 11 */
-/***/ function(module, exports) {
+/***/ function(module, exports, __webpack_require__) {
 
-	/**
-	 * TileData
-	 *  populate this before using TileMap to associate the frameId 
-	 *  and properties to the tileId in each type
-	 */
+	var DataObject = __webpack_require__(12);
 
-	var TileData = {};
+	TileData = Object.create(DataObject);
 
 	TileData.default = {
 	  frames: ['tile_placeholder'],
@@ -973,16 +985,40 @@
 
 /***/ },
 /* 12 */
+/***/ function(module, exports) {
+
+	/**
+	 * DataObject:
+	 *  a namespaced object that has a load function that takes data and turns this into that.
+	 */
+
+	var DataObject = {};
+
+	DataObject.load = function (data)
+	{
+	  var keys = Object.getOwnPropertyNames(data.data);
+	  for (var i = 0, l = keys.length; i < l; i++)
+	  {
+	    this[keys[i]] = data.data[keys[i]];
+	  }
+	}
+
+	module.exports = DataObject;
+
+
+/***/ },
+/* 13 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var Keyboard = __webpack_require__(8);
-	var Scene = __webpack_require__(5);
-	var TileMap = __webpack_require__(9);
-	var RangeSprite = __webpack_require__(13);
-	var TargetInfoScene = __webpack_require__(14);
-	var Unit = __webpack_require__(15);
-	var Soil = __webpack_require__(21);
-	var Plant = __webpack_require__(23);
+	var Keyboard    = __webpack_require__(8);
+	var Scene       = __webpack_require__(5);
+	var TileGrid    = __webpack_require__(14);
+	var TileData    = __webpack_require__(11);
+	var RangeSprite = __webpack_require__(18);
+	var TargetInfoScene = __webpack_require__(19);
+	var Unit  = __webpack_require__(20);
+	var Soil  = __webpack_require__(26);
+	var Plant = __webpack_require__(28);
 
 	var MapScene = function (floorData) {
 	  if (floorData === undefined) floorData = { name: 'test', w: 200, h: 100 };
@@ -1038,9 +1074,21 @@
 
 
 	MapScene.prototype.canUnitMoveHere = function (unit, x, y) {
-	  var tile = this.tilemap.getTile(x, y);
-	  return testTileIsGround(tile);
+	  var isWall = this.tilemap.getAt(x, y, 'wall'),
+	      noTile = this.tilemap.getAt(x, y, 'tile.id') < 0,
+	      hasUnit = isUnitAt(x, y, this, unit);
+	  
+	  return !isWall && !noTile && !hasUnit;
 	}
+
+	MapScene.prototype.canUnitPassThroughHere = function (unit, x, y) {
+	  var isWall = this.tilemap.getAt(x, y, 'wall'),
+	      noTile = this.tilemap.getAt(x, y, 'tile.id') < 0,
+	      hasEnemy = isEnemyAt(x, y, this);
+
+	  return !isWall && !noTile && !hasEnemy;
+	}
+
 
 	MapScene.prototype.getTile = function (x, y, local) {
 	  if (local === undefined) local = false;
@@ -1050,7 +1098,7 @@
 	    y = getTileY(y);
 	  }
 
-	  return this.tilemap.getTile(x, y);
+	  return this.tilemap.getAt(x, y);
 	}
 
 	MapScene.prototype.setTile = function (x, y, val, local) {
@@ -1061,7 +1109,7 @@
 	    y = getTileY(y);
 	  }
 
-	  this.tilemap.setTile(x, y, val);
+	  this.tilemap.setAt(x, y, val);
 	}
 
 	MapScene.prototype.unitClicked = function (unit) {
@@ -1071,35 +1119,24 @@
 	  this.moveRangeSprite.drawUnitsRange(this.selectedUnit, 0, range);
 	}
 
-
-	MapScene.prototype.addEntity = function (ent, layer) {
-	  if (Number.isInteger(ent)) ent = Game.getEntity(ent);
-	  ent.scene = this;
-	  if (! this.entities[ent.entType]) 
-	    this.entities[ent.entType] = [];
-	  this.entities[ent.entType].push(ent);
-	  
-	  if (layer === undefined) layer = ent.entType;
-	  this.containers[layer].addChild(ent.sprite); // changed from the Scene.addEntity
-	  // this.entContainer.addChild(ent.sprite); 
-	  return true;
-	}
-
-
 	// Private methods
 
 	function setupContainers(scene)
 	{
-	  scene.containers = {};
+	  scene.entities['Soil']  = [];
+	  scene.entities['Unit']  = [];
+	  scene.entities['Enemy'] = [];
+	  scene.entities['Plant'] = [];
+
 	  scene.containers['Background']  = new PIXI.Container();
 	  scene.containers['Soil']        = new PIXI.Container();
-	  scene.containers['BelowUnits']  = new PIXI.Container();
+	  scene.containers['RangeSprite'] = new PIXI.Container();
 	  scene.containers['Plant']       = new PIXI.Container();
 	  scene.containers['Unit']        = new PIXI.Container();
 
 	  scene.addChild(scene.containers['Background']);
 	  scene.addChild(scene.containers['Soil']);
-	  scene.addChild(scene.containers['BelowUnits']);
+	  scene.addChild(scene.containers['RangeSprite']);
 	  scene.addChild(scene.containers['Plant']);
 	  scene.addChild(scene.containers['Unit']);
 	}
@@ -1107,24 +1144,27 @@
 
 	function loadTilemap(scene, data)
 	{
-	  scene.tilemap = new TileMap(data.w, data.h);
+	  var tilemap = new TileGrid(data.w, data.h);
 	  if (data.tiles && data.tiles.length > 0)
 	  {
 	    for (var i = 0, l = data.tiles.length; i < l; i++)
 	    {
-	      var v = data.tiles[i];
-	      var type = data.types[v];
+	      var id = data.tiles[i];
+	      var type = data.types[id];
 	      if (type)
 	      {
 	        var x = i % data.w;
 	        var y = Math.floor(i / data.w);
-	        scene.tilemap.tileType = type;
-	        scene.tilemap.setTile(x, y, v);
+	        tilemap.setAt(x, y, {"tile.type": type, "tile.id": id});
+	        var props = getTileProperties(type, id);
+	        tilemap.setAt(x, y, props);
 	      }
 	    }
 	  }
+	  scene.addUpdatable(tilemap);
+	  scene.addEntity(tilemap, 'Background');
 
-	  scene.addEntity(scene.tilemap, 'Background');
+	  scene.tilemap = tilemap;
 	}
 
 	function loadUnits(scene, data)
@@ -1165,7 +1205,7 @@
 	  if (data.state)
 	    soil.state = data.state;
 
-	  scene.addEntity(soil);
+	  scene.addEntity(soil, 'Soil');
 
 	  // if the soil has plant data
 	  if (data.plant)
@@ -1175,7 +1215,7 @@
 	    if (data.plant.state)
 	      plant.state = data.plant.state;
 
-	    scene.addEntity(plant);
+	    scene.addEntity(plant, 'Plant');
 	    plant.plant(soil);
 	  }
 	}
@@ -1187,7 +1227,7 @@
 	  scene.addScene(scene.targetUI, true);
 
 	  scene.moveRangeSprite = createRangeSprite(scene);
-	  scene.containers['BelowUnits'].addChild(scene.moveRangeSprite);
+	  scene.containers['RangeSprite'].addChild(scene.moveRangeSprite);
 	}
 
 	function getTileX(x) {
@@ -1206,10 +1246,24 @@
 	  return g;
 	}
 
-	function testTileIsGround(tile) {
-	  if (tile == null) return false;
-	  if (tile.hasProperty('wall') || tile.hasProperty('hole')) return false;
-	  return true;
+	function isUnitAt(x, y, scene, excluded) {
+	  var units = scene.units;
+	  for(var i = 0, l = units.length; i < l; i++)
+	  {
+	    var unit = units[i];
+	    if (unit.tileX == x && unit.tileY == y && unit != excluded) return true;
+	  }
+	  return false;
+	}
+
+	function isEnemyAt(x, y, scene, excluded) {
+	  var enemies = scene.enemies;
+	  for (var i = 0, l = enemies.length; i < l; i++)
+	  {
+	    var enemy = enemies[i];
+	    if (enemy.tileX == x && enemy.tileY == y && enemy != excluded) return true;
+	  }
+	  return false;
 	}
 
 	function selectedUnitInput(scene) {
@@ -1263,12 +1317,381 @@
 	  }
 	}
 
+	function getTileProperties(type, id)
+	{
+	  if (! TileData.hasOwnProperty(type))
+	  {
+	    type = 'default'
+	  }
+	  return TileData[type].properties;
+	}
+
 
 	module.exports = MapScene;
 
 
 /***/ },
-/* 13 */
+/* 14 */
+/***/ function(module, exports, __webpack_require__) {
+
+	var Grid  = __webpack_require__(15);
+	var Tile  = __webpack_require__(17);
+	var TileData = __webpack_require__(11);
+
+
+	var TileGrid = function (w, h, type) {
+	  var tw = Game.props.tile_width,
+	      th = Game.props.tile_height;
+	  if (type === undefined)
+	    type = 'default';
+	  this.type = type;
+	  this.container = new PIXI.Container();
+	  this.buffer = PIXI.RenderTexture.create(w * tw, h * th);
+	  this.sprite = new PIXI.Sprite(this.buffer);
+	  this._tilesChanged = [];
+
+	  Grid.call(this, w, h);
+	}
+
+	TileGrid.prototype = Object.create(Grid.prototype);
+	TileGrid.prototype.constuctor = TileGrid;
+
+	Object.defineProperty(TileGrid.prototype, 'x', {
+	  get: function () { return this.sprite.x; },
+	  set: function (val) { this.sprite.x = val; }
+	});
+
+	Object.defineProperty(TileGrid.prototype, 'y', {
+	  get: function () { return this.sprite.y; },
+	  set: function (val) { this.sprite.y = val; }
+	});
+
+
+	TileGrid.prototype.getAt = function (x, y, key) { 
+	  if (key !== undefined)
+	  {
+	    return Grid.prototype.getAt.call(this, x, y, key)
+	  }
+	  else
+	  {
+	    return Grid.prototype.getAt.call(this, x, y, 'tile');
+	  }
+	}
+
+	TileGrid.prototype.setAt = function (x, y, val) {
+	  if (val instanceof Tile)
+	  {
+	    Grid.prototype.setAt.call(this, x, y, { tile: val, "tile.id": val.id, "tile.type": val.type });
+	  }
+	  else if (typeof val == 'object')
+	  {
+	    Grid.prototype.setAt.call(this, x, y, val);
+	  }
+	  else if (Number.isInteger(val))
+	  {
+	    Grid.prototype.setAt.call(this, x, y, { "tile.id": val });
+	  }
+	  else if (typeof val == 'string')
+	  {
+	    Grid.prototype.setAt.call(this, x, y, { "tile.type": val });
+	  }
+	  else
+	  {
+	    throw new Error('Unsupported value')
+	  }
+	}
+
+	TileGrid.prototype.removeAt  = function (x, y) { 
+	  this.nodes[y][x].id = -1;
+	  this._tilesChanged.push({x: x, y: y});
+	}
+
+	// Tilemap.update
+	// if any tiles have changed, update the rendering of them
+	TileGrid.prototype.update  = function () {
+	  if (this._tilesChanged.length == 0) return;
+
+	  while (this._tilesChanged.length > 0)
+	  {
+	    var c = this._tilesChanged.pop(),
+	        tile = this.nodes[c.y][c.x],
+	        id = tile.id,
+	        type = tile.type;        
+	  }
+
+	  Game.renderer.render(this.container, this.buffer);
+	}
+
+
+	TileGrid.prototype._onNodeCreated = function (x, y, node)
+	{
+	  var tile = new Tile(this.type, -1);
+	  tile.x = x * Game.props.tile_width;
+	  tile.y = y * Game.props.tile_height;
+	  node.set({tile: tile});
+	  this.container.addChild(tile);
+	}
+
+	TileGrid.prototype._onNodeSet = function (x, y, node, val)
+	{
+	  this._tilesChanged.push({x: x, y: y});
+	}
+
+	module.exports = TileGrid;
+
+
+/***/ },
+/* 15 */
+/***/ function(module, exports, __webpack_require__) {
+
+	var Node = __webpack_require__(16);
+
+	var Grid = function (width, height, matrix)
+	{
+	  if (typeof width === 'object')
+	  {
+	    matrix = width;
+	    height = matrix.length;
+	    width = matrix[0].length;
+	  }
+
+	  this.width = width;
+	  this.height = height;
+
+	  _buildNodes(width, height, matrix, this);
+	}
+
+	Grid.prototype = {};
+	Grid.prototype.constructor = Grid;
+
+	Grid.prototype.createAt = function (x, y) {
+	  if (outOfRange(x, y, this)) return;
+	  var node = new Node(x, y);
+	  this.nodes[y][x] = node;
+	  this._onNodeCreated(x, y, node);
+	}
+
+	Grid.prototype.getAt = function (x, y, key) {
+	  if (outOfRange(x, y, this)) return null;
+	  return this.nodes[y][x].get(key);
+	}
+
+	Grid.prototype.setAt = function (x, y, val) {
+	  if (outOfRange(x, y, this)) return;
+	  var node = this.nodes[y][x];
+	  node.set(val);
+	  this._onNodeSet(x, y, node, val);
+	}
+
+	Grid.prototype.removeAt = function (x, y, keys) {
+	  if (outOfRange(x, y, this)) return;
+	  var node = this.nodes[y][x];
+	  node.remove(keys);
+	  this._onNodeRemove(x, y, node, keys);
+	}
+
+	Grid.prototype._onNodeCreated = function (x, y, node) {}
+	Grid.prototype._onNodeSet = function (x, y, node, val) {}
+	Grid.prototype._onNodeRemove = function (x, y, node, keys) {}
+
+	function _buildNodes(w, h, m, grid)
+	{
+	  var i, j;
+	  grid.nodes = new Array(h);
+
+	  for (i = 0; i < h; ++i) {
+	    grid.nodes[i] = new Array(w);
+	    for (j = 0; j < w; ++j) {
+	      grid.createAt(j, i);
+	    }
+	  }
+
+	  if (m === undefined) {
+	    return;
+	  }
+
+	  if (m.length !== h || m[0].length !== w) {
+	    throw new Error('Matrix size does not fit');
+	  }
+
+	  for (i = 0; i < h; ++i) {
+	    for (j = 0; j < w; ++j) {
+	      grid.setAt(j, i, m[i][j]);
+	    }
+	  }
+
+	  return nodes;
+	}
+
+	function outOfRange(x, y, grid)
+	{
+	  return (x < 0 || x > grid.width || y < 0 || y > grid.height);
+	}
+
+	module.exports = Grid;
+
+
+/***/ },
+/* 16 */
+/***/ function(module, exports) {
+
+	
+	var GridNode = function (x, y, values) {
+	  this.x = x;
+	  this.y = y;
+	  this._properties = {};
+	  this._value = 0;
+	}
+
+	GridNode.prototype = {};
+	GridNode.prototype.constructor = GridNode;
+
+	Object.defineProperty(GridNode.prototype, 'value', {
+	  get: function () { return this._value; },
+	  set: function (val) { this._value = val; }
+	});
+
+	GridNode.prototype.set = function (values)
+	{
+	  if (typeof values === 'object')
+	  {
+	    var keys = Object.getOwnPropertyNames(values);
+	    for (var i = 0, l = keys.length; i < l; i++)
+	    {
+	      var key = keys[i];
+	      var value = values[key];
+	      // support for dot notation value setting
+	      if (key.indexOf('.') >= 0)
+	      {
+	        eval("this._properties."+key+" = value");
+	      }
+	      else
+	      {
+	        this._properties[key] = values[key];  
+	      }
+	    }
+	  }
+	  else
+	  {
+	    this._value = values;
+	  }
+	}
+
+	GridNode.prototype.remove = function (keys)
+	{
+	  if (keys instanceof Array)
+	  {
+	    for (var i = 0, l = keys.length; i < l; i++)
+	    {
+	      var key = keys[i];
+	      delete this._properties[key];
+	    }  
+	  }
+	  else if (typeof keys == 'string')
+	  {
+	    delete this._properties[key];
+	  }
+	  else
+	  {
+	    this._value = -1;
+	  }
+	}
+
+	GridNode.prototype.get = function (key)
+	{
+	  if (key === undefined)
+	    return this._value;
+	  else
+	  {
+	    if (key.indexOf('.') >= 0)
+	    {
+	      return eval("this._properties."+key);
+	    }
+	    else
+	    {
+	      return this._properties[key];  
+	    }
+	  }
+	}
+
+	module.exports = GridNode;
+
+
+/***/ },
+/* 17 */
+/***/ function(module, exports, __webpack_require__) {
+
+	var TileData = __webpack_require__(11);
+
+	var TileSprite = function (type, id)
+	{
+	  var frameId = getFrame(type, id);
+	  var texture = PIXI.utils.TextureCache[frameId];
+	  this._type = type;
+	  this._id = id;
+	  PIXI.Sprite.call(this, texture);
+	}
+
+	TileSprite.prototype = Object.create(PIXI.Sprite.prototype);
+	TileSprite.prototype.constructor = TileSprite;
+
+	Object.defineProperty(TileSprite.prototype, 'type', {
+	  get: function () { return this._type; },
+	  set: function (val) { 
+	    if (this._type == val) return;
+	    this._type = val;
+	    tileChanged(this);
+	  }
+	});
+
+	Object.defineProperty(TileSprite.prototype, 'id', {
+	  get: function () { return this._id; },
+	  set: function (val) { 
+	    if (this._id == val) return;
+	    this._id = val;
+	    tileChanged(this);
+	  }
+	});
+
+	TileSprite.prototype.set = function (args) {
+	  if (args.hasOwnProperty('id'))
+	    this._id = args.id;
+	  if (args.hasOwnProperty('type'))
+	    this._type = args.type;
+
+	  if (args.hasOwnProperty('id') || agrs.hasOwnProperty('type'))
+	    tileChanged(this);
+	}
+
+	function getFrame(type, id)
+	{
+	  if (! TileData.hasOwnProperty(type)) {
+	    type = 'default';
+	  }
+	  if (TileData[type].frames.length <= id)
+	    id = 0;
+	  return TileData[type].frames[id];
+	}
+
+	function tileChanged(tile)
+	{
+	  var frameId, texture;
+	  frameId = getFrame(tile.type, tile.id);
+	  texture = PIXI.utils.TextureCache[frameId];
+	  if (texture)
+	  {
+	    tile.visible = true;
+	    tile.texture = texture;
+	  }
+	  else
+	    tile.visible = false;
+	}
+
+	module.exports = TileSprite;
+
+
+/***/ },
+/* 18 */
 /***/ function(module, exports) {
 
 	
@@ -1292,48 +1715,100 @@
 	}
 
 	// TODO: improve this to support drawing ranges with min and max values
-	RangeSprite.prototype.drawUnitsRange = function (unit, min, max, before, after) {
+	RangeSprite.prototype.drawUnitsRange = function (unit, min, max) {
 	  var map = this.map;
+
 	  this.clearTiles();
 	  this.clear();
-	  if (before === undefined)
-	    this.lineStyle(1, this.draw.color, this.draw.alpha);
-	  else
-	    before(this)
-	  
+
+	  this.lineStyle(1, this.draw.color, this.draw.alpha);
+
 	  if (min != 0)
 	  {
-	    this.addTiles(unit, unit.tileX, unit.tileY, 0, min, function (x, y) { return map.canUnitMoveHere(unit, x, y); }, false);
+	    this.addTiles(unit, unit.tileX, unit.tileY, 0, min, 
+	      function (x, y) { return !map.canUnitMoveHere(unit, x, y); },
+	      function (x, y) { return map.canUnitPassThroughHere(unit, x, y); }, true);
 	  }
-	  this.addTiles(unit, unit.tileX, unit.tileY, min, max, function (x, y) { return map.canUnitMoveHere(unit, x, y); });
 
-	  if (after === undefined)
-	  {
-	    // this.endFill();
-	  }
-	  else
-	    after(this)
+	  this.addTiles(unit, unit.tileX, unit.tileY, min, max, 
+	    function (x, y) { return !map.canUnitMoveHere(unit, x, y); },
+	    function (x, y) { return map.canUnitPassThroughHere(unit, x, y); });
+
 	}
 
-	RangeSprite.prototype.addTiles = function (unit, x, y, r, max_r, check, draw) {
-	  var d = 0, dir = null, xx = x, yy = y, l = directions.length;
-	  if (draw === undefined) draw = true;
+	RangeSprite.prototype.addTiles = function (unit, x, y, r, max_r, blocked, passable, dontDraw) {
+	  var d = 0, dir = null, xx = x, yy = y, l = directions.length, block = blocked(x, y), pass = passable(x, y);
 
 	  if (r >= max_r) return;
-	  if (! check(x, y)) return;
+	  if (block && !pass) return;
 	  
 	  while (d < l) {
 	    dir = directions[d];
 	    xx = x + dir[0];
 	    yy = y + dir[1];
-	    this.addTiles(unit, xx, yy, r+1, max_r, check);
+	    this.addTiles(unit, xx, yy, r+1, max_r, blocked, passable);
 	    d++;
 	  }
-	  if (this.tiles.findIndex(function (elm) { return elm.x == x && elm.y == y; }) != -1) return;
-	  if (draw)
-	    drawRect(this, x, y);
 
 	  this.tiles.push({x: x, y: y});
+
+	  if (dontDraw) return;
+
+	  if (block)
+	    drawRect(this, x, y);
+	  else
+	    drawFull(this, x, y);
+	}
+
+	function drawFull(g, x, y) {
+	  var w = Game.properties.tile_width, 
+	      h = Game.properties.tile_height
+	      xx = x * w,
+	      yy = y * h,
+	      padding = { x: 4, y: 4 };
+	  // setup the offset & padding
+	  w  -= padding.x * 2;
+	  h  -= padding.y * 2;
+	  xx += padding.x;
+	  yy += padding.y;
+
+	  g.drawRect(xx, yy, w, h);
+	  drawLines(g, x, y, xx, yy, w, h);
+	}
+
+	function drawLines(g, x, y, left, top, width, height)
+	{
+	  var xx = left,
+	      yy = top,
+	      right = xx + width,
+	      bottom = yy + height,
+	      steps = 8
+	      step = width / steps,
+	      i = 0,
+	      w = width,
+	      h = height;
+
+	  yy = top + (step * steps);
+	  h = (height - step * steps);
+	  w = (width - step * steps);
+	  while (i < steps)
+	  {
+	    g.moveTo(xx, yy);
+	    g.lineTo(xx + w, yy + h);
+	    if (i >= Math.floor(steps * 0.5))
+	    {
+	      xx += step * 2;
+	      w -= step * 2;
+	      h -= step * 2;
+	    }
+	    else
+	    {
+	      yy -= step * 2;
+	      w += step * 2;
+	      h += step * 2;
+	    }
+	    i++;
+	  }
 	}
 
 	function drawRect(g, x, y) {
@@ -1355,7 +1830,7 @@
 
 
 /***/ },
-/* 14 */
+/* 19 */
 /***/ function(module, exports, __webpack_require__) {
 
 	var Scene = __webpack_require__(5);
@@ -1407,11 +1882,11 @@
 
 
 /***/ },
-/* 15 */
+/* 20 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var UnitData     = __webpack_require__(16);
-	var Actor        = __webpack_require__(17);
+	var UnitData     = __webpack_require__(21);
+	var Actor        = __webpack_require__(22);
 
 	var UNIT_OFFSET = {x: 0, y: 8};
 
@@ -1485,7 +1960,7 @@
 
 
 /***/ },
-/* 16 */
+/* 21 */
 /***/ function(module, exports) {
 
 	var UnitData = {
@@ -1548,12 +2023,12 @@
 
 
 /***/ },
-/* 17 */
+/* 22 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var HealthSprite = __webpack_require__(18);
-	var Entity       = __webpack_require__(19);
-	var ACTOR_STATES = __webpack_require__(20);
+	var HealthSprite = __webpack_require__(23);
+	var Entity       = __webpack_require__(24);
+	var ACTOR_STATES = __webpack_require__(25);
 
 	// Extends Entity
 	var Actor = function (entType, sprite) {
@@ -1655,7 +2130,7 @@
 
 
 /***/ },
-/* 18 */
+/* 23 */
 /***/ function(module, exports) {
 
 	
@@ -1698,7 +2173,7 @@
 
 
 /***/ },
-/* 19 */
+/* 24 */
 /***/ function(module, exports, __webpack_require__) {
 
 	var Entity       = __webpack_require__(6);
@@ -1750,7 +2225,7 @@
 
 
 /***/ },
-/* 20 */
+/* 25 */
 /***/ function(module, exports) {
 
 	
@@ -1762,11 +2237,11 @@
 
 
 /***/ },
-/* 21 */
+/* 26 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var SoilData     = __webpack_require__(22);
-	var Entity       = __webpack_require__(19);
+	var SoilData     = __webpack_require__(27);
+	var Entity       = __webpack_require__(24);
 
 	// Extends Entity
 	var Soil = function (type) {
@@ -1844,7 +2319,7 @@
 
 
 /***/ },
-/* 22 */
+/* 27 */
 /***/ function(module, exports) {
 
 	var SoilData = {
@@ -1868,11 +2343,11 @@
 
 
 /***/ },
-/* 23 */
+/* 28 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var PlantData     = __webpack_require__(24);
-	var Entity        = __webpack_require__(19);
+	var PlantData     = __webpack_require__(29);
+	var Entity        = __webpack_require__(24);
 
 	// Extends Entity
 	var Plant = function (type) {
@@ -2005,38 +2480,22 @@
 
 
 /***/ },
-/* 24 */
-/***/ function(module, exports) {
+/* 29 */
+/***/ function(module, exports, __webpack_require__) {
 
-	var PlantData = {
+	var DataObject = __webpack_require__(12);
 
-	  types: ['default', 'peas'],
-	  default: {
-	    states: ['none'],
-	    frames: ['tile_placeholder'],
-	    props: {}
-	  },
-	  peas: {
-	    states: ['seed', 'sprout', 'vine', 'bud', 'hasPods'],
-	    frames: ['tile_placeholder', 'tile_placeholder', 'tile_placeholder', 'tile_placeholder', 'tile_placeholder'],
-	    props: {
-	      waterUsedPerTick: [5, 3, 3, 2, 0],
-	      growthPerDrink:   [1, 3, 2, 2, 0],
-	      growthStateMap:   [0, 10, 40, 60, 100]
-	    }
-	  }
-
-	};
+	PlantData = Object.create(DataObject);
 
 	module.exports = PlantData;
 
 
 /***/ },
-/* 25 */
+/* 30 */
 /***/ function(module, exports, __webpack_require__) {
 
-	var MapScene    = __webpack_require__(12);
-	var EditStates  = __webpack_require__(26);
+	var MapScene    = __webpack_require__(13);
+	var EditStates  = __webpack_require__(31);
 
 	var MapEditScene = function () {
 	  var w, h, width, height;
@@ -2088,7 +2547,7 @@
 
 
 /***/ },
-/* 26 */
+/* 31 */
 /***/ function(module, exports) {
 
 	

@@ -1,10 +1,10 @@
 {
-  "types": [{
-    "name": "floor",
-    "frames": ["floor"]
-  }, {
-    "name": "wall",
+  "floor": {
+    "frames": ["floor"],
+    "properties": {}
+  },
+  "wall": {
     "frames": ["wall"],
     "properties": { "wall": true }
-  }]
+  }
 }

@@ -1,10 +1,6 @@
-/**
- * TileData
- *  populate this before using TileMap to associate the frameId 
- *  and properties to the tileId in each type
- */
+var DataObject = require(__dirname+'/../game/DataObject');
 
-var TileData = {};
+TileData = Object.create(DataObject);
 
 TileData.default = {
   frames: ['tile_placeholder'],

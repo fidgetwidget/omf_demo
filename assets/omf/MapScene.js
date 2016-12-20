@@ -1,10 +1,11 @@
-var Keyboard = require(__dirname+'/../game/Keyboard');
-var Scene = require(__dirname+'/../game/Scene');
-var TileMap = require(__dirname+'/../game/TileMap');
+var Keyboard    = require(__dirname+'/../game/Keyboard');
+var Scene       = require(__dirname+'/../game/Scene');
+var TileGrid    = require(__dirname+'/../game/TileGrid');
+var TileData    = require(__dirname+'/../game/TileData');
 var RangeSprite = require(__dirname+'/RangeSprite');
 var TargetInfoScene = require(__dirname+'/TargetInfoScene');
-var Unit = require(__dirname+'/Unit');
-var Soil = require(__dirname+'/Soil');
+var Unit  = require(__dirname+'/Unit');
+var Soil  = require(__dirname+'/Soil');
 var Plant = require(__dirname+'/Plant');
 
 var MapScene = function (floorData) {
@@ -61,9 +62,21 @@ MapScene.prototype.inRange = function (x, y) {
 
 
 MapScene.prototype.canUnitMoveHere = function (unit, x, y) {
-  var tile = this.tilemap.getTile(x, y);
-  return testTileIsGround(tile);
+  var isWall = this.tilemap.getAt(x, y, 'wall'),
+      noTile = this.tilemap.getAt(x, y, 'tile.id') < 0,
+      hasUnit = isUnitAt(x, y, this, unit);
+  
+  return !isWall && !noTile && !hasUnit;
 }
+
+MapScene.prototype.canUnitPassThroughHere = function (unit, x, y) {
+  var isWall = this.tilemap.getAt(x, y, 'wall'),
+      noTile = this.tilemap.getAt(x, y, 'tile.id') < 0,
+      hasEnemy = isEnemyAt(x, y, this);
+
+  return !isWall && !noTile && !hasEnemy;
+}
+
 
 MapScene.prototype.getTile = function (x, y, local) {
   if (local === undefined) local = false;
@@ -73,7 +86,7 @@ MapScene.prototype.getTile = function (x, y, local) {
     y = getTileY(y);
   }
 
-  return this.tilemap.getTile(x, y);
+  return this.tilemap.getAt(x, y);
 }
 
 MapScene.prototype.setTile = function (x, y, val, local) {
@@ -84,7 +97,7 @@ MapScene.prototype.setTile = function (x, y, val, local) {
     y = getTileY(y);
   }
 
-  this.tilemap.setTile(x, y, val);
+  this.tilemap.setAt(x, y, val);
 }
 
 MapScene.prototype.unitClicked = function (unit) {
@@ -94,35 +107,24 @@ MapScene.prototype.unitClicked = function (unit) {
   this.moveRangeSprite.drawUnitsRange(this.selectedUnit, 0, range);
 }
 
-
-MapScene.prototype.addEntity = function (ent, layer) {
-  if (Number.isInteger(ent)) ent = Game.getEntity(ent);
-  ent.scene = this;
-  if (! this.entities[ent.entType]) 
-    this.entities[ent.entType] = [];
-  this.entities[ent.entType].push(ent);
-  
-  if (layer === undefined) layer = ent.entType;
-  this.containers[layer].addChild(ent.sprite); // changed from the Scene.addEntity
-  // this.entContainer.addChild(ent.sprite); 
-  return true;
-}
-
-
 // Private methods
 
 function setupContainers(scene)
 {
-  scene.containers = {};
+  scene.entities['Soil']  = [];
+  scene.entities['Unit']  = [];
+  scene.entities['Enemy'] = [];
+  scene.entities['Plant'] = [];
+
   scene.containers['Background']  = new PIXI.Container();
   scene.containers['Soil']        = new PIXI.Container();
-  scene.containers['BelowUnits']  = new PIXI.Container();
+  scene.containers['RangeSprite'] = new PIXI.Container();
   scene.containers['Plant']       = new PIXI.Container();
   scene.containers['Unit']        = new PIXI.Container();
 
   scene.addChild(scene.containers['Background']);
   scene.addChild(scene.containers['Soil']);
-  scene.addChild(scene.containers['BelowUnits']);
+  scene.addChild(scene.containers['RangeSprite']);
   scene.addChild(scene.containers['Plant']);
   scene.addChild(scene.containers['Unit']);
 }
@@ -130,24 +132,27 @@ function setupContainers(scene)
 
 function loadTilemap(scene, data)
 {
-  scene.tilemap = new TileMap(data.w, data.h);
+  var tilemap = new TileGrid(data.w, data.h);
   if (data.tiles && data.tiles.length > 0)
   {
     for (var i = 0, l = data.tiles.length; i < l; i++)
     {
-      var v = data.tiles[i];
-      var type = data.types[v];
+      var id = data.tiles[i];
+      var type = data.types[id];
       if (type)
       {
         var x = i % data.w;
         var y = Math.floor(i / data.w);
-        scene.tilemap.tileType = type;
-        scene.tilemap.setTile(x, y, v);
+        tilemap.setAt(x, y, {"tile.type": type, "tile.id": id});
+        var props = getTileProperties(type, id);
+        tilemap.setAt(x, y, props);
       }
     }
   }
+  scene.addUpdatable(tilemap);
+  scene.addEntity(tilemap, 'Background');
 
-  scene.addEntity(scene.tilemap, 'Background');
+  scene.tilemap = tilemap;
 }
 
 function loadUnits(scene, data)
@@ -188,7 +193,7 @@ function addSoil(scene, data)
   if (data.state)
     soil.state = data.state;
 
-  scene.addEntity(soil);
+  scene.addEntity(soil, 'Soil');
 
   // if the soil has plant data
   if (data.plant)
@@ -198,7 +203,7 @@ function addSoil(scene, data)
     if (data.plant.state)
       plant.state = data.plant.state;
 
-    scene.addEntity(plant);
+    scene.addEntity(plant, 'Plant');
     plant.plant(soil);
   }
 }
@@ -210,7 +215,7 @@ function loadUI(scene)
   scene.addScene(scene.targetUI, true);
 
   scene.moveRangeSprite = createRangeSprite(scene);
-  scene.containers['BelowUnits'].addChild(scene.moveRangeSprite);
+  scene.containers['RangeSprite'].addChild(scene.moveRangeSprite);
 }
 
 function getTileX(x) {
@@ -229,10 +234,24 @@ function createRangeSprite(map) {
   return g;
 }
 
-function testTileIsGround(tile) {
-  if (tile == null) return false;
-  if (tile.hasProperty('wall') || tile.hasProperty('hole')) return false;
-  return true;
+function isUnitAt(x, y, scene, excluded) {
+  var units = scene.units;
+  for(var i = 0, l = units.length; i < l; i++)
+  {
+    var unit = units[i];
+    if (unit.tileX == x && unit.tileY == y && unit != excluded) return true;
+  }
+  return false;
+}
+
+function isEnemyAt(x, y, scene, excluded) {
+  var enemies = scene.enemies;
+  for (var i = 0, l = enemies.length; i < l; i++)
+  {
+    var enemy = enemies[i];
+    if (enemy.tileX == x && enemy.tileY == y && enemy != excluded) return true;
+  }
+  return false;
 }
 
 function selectedUnitInput(scene) {
@@ -284,6 +303,15 @@ function cameraMoveInput(scene) {
   {
     scene.entContainer.x -= 2; 
   }
+}
+
+function getTileProperties(type, id)
+{
+  if (! TileData.hasOwnProperty(type))
+  {
+    type = 'default'
+  }
+  return TileData[type].properties;
 }
 
 

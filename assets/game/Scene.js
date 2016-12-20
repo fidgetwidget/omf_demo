@@ -7,10 +7,10 @@ var Scene = function (name) {
   this.entities = {};
   this.scenes  = {};
   this.showing = [];
-  
+  this.updateables = [];
+
   PIXI.Container.call(this);  
-  this.entContainer = new PIXI.Container();
-  this.addChild(this.entContainer);
+  this.containers = {};
 }
 
 Scene.prototype = Object.create(PIXI.Container.prototype);
@@ -34,21 +34,41 @@ Scene.prototype.update = function () {
       }
     }
   }
+
+  for (var i = 0, l = this.updateables.length; i < l; i++) {
+    this.updateables[i].update();
+  }
   
 }
 
 // Add an entity to the scene, 
 // and add it's sprite to the container
 // - supports uid or Entity
-Scene.prototype.addEntity = function (ent) {
+Scene.prototype.addEntity = function (ent, layer) {
   if (Number.isInteger(ent)) ent = Game.getEntity(ent);
   if (! ent instanceof Entity) return false;
+  
+  if (layer === undefined) layer = 'Entity';
+  if (! this.entities[ent.entType]) this.entities[ent.entType] = [];
+  if (! this.containers[layer]) this.createLayer(layer);
+
   ent.scene = this;
-  if (! this.entities[ent.entType]) 
-    this.entities[ent.entType] = [];
   this.entities[ent.entType].push(ent);
-  this.entContainer.addChild(ent.sprite);
+
+  this.addSprite(ent.sprite, layer);
   return true;
+}
+
+Scene.prototype.addUpdatable = function (obj) {
+  if (! obj.hasOwnProperty('update')) return false;
+  this.updateables.push(obj);
+  return true;
+}
+
+Scene.prototype.addSprite = function (sprite, layer) {
+  if (layer === undefined) layer = 'Sprite';
+  if (! this.containers[layer]) createLayer(layer);
+  this.containers[layer].addChild(sprite);
 }
 
 // Add a scene to the scene list
@@ -88,6 +108,12 @@ Scene.prototype.hideScene = function (name) {
   this.removeChild(scene);
   this.showing.splice(i, 1);
   return true;
+}
+
+Scene.prototype.createLayer = function (name) {
+  var container = new PIXI.Container();
+  this.containers[name] = container;
+  this.addChild(container);
 }
 
 
