@@ -5,12 +5,13 @@
 
 var DataObject = {};
 
-DataObject.load = function (data)
+DataObject.load = function (resource)
 {
-  var keys = Object.getOwnPropertyNames(data.data);
+  var data = resource.data ?: resource;
+  var keys = Object.getOwnPropertyNames(data);
   for (var i = 0, l = keys.length; i < l; i++)
   {
-    this[keys[i]] = data.data[keys[i]];
+    this[keys[i]] = data[keys[i]];
   }
 }
 
