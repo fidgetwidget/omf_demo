@@ -1,1 +1,27 @@
-<h1>Test</h1>
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>No Title.</title>
+    <link href="/public/css/styles.css" rel="stylesheet">
+  </head>
+  <body>
+    <div id="content">
+      <div class="info-box hidden" id="instructions">
+        <h4 class="title">Instructions</h4>
+        <a class="close"></a>
+        <ul>
+          <li>Click to select a Unit. </li>
+          <li>WASD to move selected Unit.</li>
+          <li>Space or Click off Unit to deselect.</li>
+        </ul>
+      </div>
+      
+      <div class="render-container" id="game_container"></div>
+      
+      <div class="info-container" id="debug_container"><p>debug stuff goes here</p></div>
+    </div>
+    <script src="/public/js/vendor/pixi.js"></script>
+    <script src="/public/js/app.js"></script>
+  </body>
+</html>
