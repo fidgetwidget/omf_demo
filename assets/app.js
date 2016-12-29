@@ -11,7 +11,7 @@ var floor_data;
 Dom.ready(
   function() {
     PageScripts.run();
-
+    PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
     Game.init();
     // TODO: make the image assets into a spritesheet
     Game.assets
