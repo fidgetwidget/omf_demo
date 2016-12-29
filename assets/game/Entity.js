@@ -19,14 +19,20 @@ Entity.prototype = {
   get position ()       { return this.sprite.position; },
 
   get x ()              { return this.sprite.x; },
-  set x (val)           { this.sprite.x = val; },
+  set x (val)           { this.sprite.x = val; positionChanged(this); },
 
   get y ()              { return this.sprite.y; },
-  set y (val)           { this.sprite.y = val; },
+  set y (val)           { this.sprite.y = val; positionChanged(this); },
 
   update: function () {}
 }
 
 Entity.prototype.constructor = Entity;
+Entity.prototype._onPositionChanged = null;
+
+function positionChanged(ent)
+{
+  if (ent._onPositionChanged) ent._onPositionChanged(ent);
+}
 
 module.exports = Entity;
