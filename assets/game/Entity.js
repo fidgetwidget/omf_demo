@@ -28,11 +28,12 @@ Entity.prototype = {
 }
 
 Entity.prototype.constructor = Entity;
-Entity.prototype._onPositionChanged = null;
+Entity.prototype._onPositionChanged = null; // function (entity) {}
+
+module.exports = Entity;
+
 
 function positionChanged(ent)
 {
   if (ent._onPositionChanged) ent._onPositionChanged(ent);
 }
-
-module.exports = Entity;

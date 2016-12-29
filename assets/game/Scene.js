@@ -1,20 +1,32 @@
 var Entity = require(__dirname+'/Entity');
 
 // A Container for stuff
-var Scene = function (name) {
+var Scene = function (name, parent) {
+  if (parent === undefined) parent = null;
   this.name = name;
-
+  this.allEntities = [];
   this.entities = {};
   this.scenes  = {};
   this.showing = [];
   this.updateables = [];
+  this._parentScene = parent;
 
   PIXI.Container.call(this);  
-  this.containers = {};
+  this.containers = {
+    Screen: new PIXI.Container(),
+    UI: new PIXI.Container()
+  };
+
+  this.addChild(this.containers.Screen);
+  this.addChild(this.containers.UI);
 }
 
 Scene.prototype = Object.create(PIXI.Container.prototype);
 Scene.prototype.constructor = Scene;
+
+Object.defineProperty(Scene.prototype, 'parentScene', {
+  get: function ()    { return this._parentScene; }
+});
 
 Scene.prototype.update = function () {
   if (this.showing.length > 0)
@@ -23,15 +35,6 @@ Scene.prototype.update = function () {
       var scene = this.getScene(this.showing[i]);
       if (scene)
         scene.update();
-    }
-  }
-
-  for (k in this.entities)
-  {
-    if (this.entities[k].length > 0) {
-      for (var i = 0, l = this.entities[k].length; i < l; i++) {
-        this.entities[k][i].update();
-      }
     }
   }
 
@@ -53,22 +56,27 @@ Scene.prototype.addEntity = function (ent, layer) {
   if (! this.containers[layer]) this.createLayer(layer);
 
   ent.scene = this;
+  this.allEntities.push(ent);
   this.entities[ent.entType].push(ent);
-
+  entityAdded(this, ent);
   this.addSprite(ent.sprite, layer);
+  this.addUpdatable(ent);
   return true;
 }
 
+// add something that updates
 Scene.prototype.addUpdatable = function (obj) {
   if (! obj.hasOwnProperty('update')) return false;
   this.updateables.push(obj);
   return true;
 }
 
+
 Scene.prototype.addSprite = function (sprite, layer) {
   if (layer === undefined) layer = 'Sprite';
   if (! this.containers[layer]) createLayer(layer);
   this.containers[layer].addChild(sprite);
+  spriteAdded(this, sprite);
 }
 
 // Add a scene to the scene list
@@ -110,11 +118,32 @@ Scene.prototype.hideScene = function (name) {
   return true;
 }
 
-Scene.prototype.createLayer = function (name) {
+Scene.prototype.createLayer = function (name, ui) {
+  if (ui === undefined) ui = false;
   var container = new PIXI.Container();
   this.containers[name] = container;
-  this.addChild(container);
+  
+  if (ui) {
+    this.containers.UI.addChild(container)
+  } else {
+    this.containers.Screen.addChild(container)
+  }
+  
 }
 
+// for location stored entities
+Scene.prototype._onSpriteAdded = null // function (sprtie) {}
+Scene.prototype._onEntityAdded = null // function (entity) {}
 
 module.exports = Scene;
+
+
+function entityAdded(scene, entity) 
+{
+  if (scene._onEntityAdded) scene._onEntityAdded(entity);
+}
+
+function spriteAdded(scene, sprite) 
+{
+  if (scene._onSpriteAdded) scene._onSpriteAdded(sprite);
+}
