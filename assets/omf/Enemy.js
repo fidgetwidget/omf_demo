@@ -20,18 +20,16 @@ Enemy.prototype.constructor = Enemy;
 
 // Methods
 
-Enemy.prototype.initialize = function () 
+Enemy.prototype.loadData = function () 
 {
   loadStats(this);
+}
 
-  this.offset.x = ENEMY_OFFSET.x;
-  this.offset.y = ENEMY_OFFSET.y;
-  
+Enemy.prototype.bindBehaviour = function () 
+{
   this.sprite.interactive = true;
   this.sprite.on('click', onClick, this);
   this.sprite.on('touchstart', onClick, this);
-
-  Actor.prototype.initialize.call(this);
 }
 
 // Private Methods
@@ -64,7 +62,9 @@ function getFrame(type, state, index)
 
 function onClick(e)
 {
-  console.log(e.target);
+  e.stopPropagation();
+  if (this.scene && typeof this.scene.entityClicked == 'function')
+    this.scene.entityClicked(this);
 }
 
 

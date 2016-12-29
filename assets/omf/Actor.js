@@ -1,6 +1,7 @@
 var HealthSprite = require(__dirname+'/HealthSprite');
 var Entity       = require(__dirname+'/TileEntity');
 var ACTOR_STATES = require(__dirname+'/ActorStates');
+var ACTOR_OFFSET = {x: 0, y: 8};
 
 // Extends Entity
 var Actor = function (entType, sprite) {
@@ -8,10 +9,12 @@ var Actor = function (entType, sprite) {
   this._state = ACTOR_STATES.IDLE;
   this._behaviour = 'wait';
   this._destination = new PIXI.Point(0,0);
+  this._speed = 1;
+  this._wait = 100;
   this.animation = null;
   Entity.call(this, entType, sprite)
 
-  this.initialize();
+  // this.initialize(); called in TileEntity constructor
 }
 
 Actor.prototype = Object.create(Entity.prototype);
@@ -28,15 +31,28 @@ Object.defineProperty(Actor.prototype, 'hasDestination', {
   get: function ()    { return this.xx != this._destination.x || this.yy != this._destination.y; }
 })
 
+Object.defineProperty(Actor.prototype, 'wait', {
+  get: function ()    { return this._wait; },
+  set: function (val) { this._wait = val; }
+});
+
+Object.defineProperty(Actor.prototype, 'speed', {
+  get: function ()    { return this._speed; },
+  set: function (val) { this._speed = val; }
+});
+
 // Methods
 
 Actor.prototype.initialize = function () {
 
   Entity.prototype.initialize.call(this);
 
-  // create and show the health
-  this.healthSprite = makeHealthSprite(this);
-  this.sprite.addChild(this.healthSprite);
+  this.offset.x = ACTOR_OFFSET.x;
+  this.offset.y = ACTOR_OFFSET.y;
+
+  this.loadData();
+  this.addHealthSprite();
+  this.bindBehaviour()
 }
 
 Actor.prototype.update = function () { 
@@ -64,6 +80,17 @@ Actor.prototype.moveTo = function (x, y, immediate) {
   }
 }
 
+Actor.prototype.loadData = function () {}
+
+Actor.prototype.addHealthSprite = function ()
+{
+  // create and show the health
+  this.healthSprite = makeHealthSprite(this);
+  this.sprite.addChild(this.healthSprite);
+}
+
+Actor.prototype.bindBehaviour = function () {}
+
 // Private Methods
 
 function lerpMovement(cur, dest, size)
@@ -80,7 +107,7 @@ function makeHealthSprite(unit)
 {
   var hearts = unit.stats && unit.stats.max_health ? unit.stats.max_health : 2;
   var s = new HealthSprite(hearts);
-  s.y = unit.y - unit.sprite.height - 32;
+  s.y = unit.y - (Game.props.tile_height + unit.sprite.height + unit.offset.y);
   return s;
 }
 

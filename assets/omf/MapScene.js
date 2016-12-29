@@ -1,30 +1,33 @@
-var Keyboard    = require(__dirname+'/../game/Keyboard');
 var Scene       = require(__dirname+'/../game/Scene');
-var TileGrid    = require(__dirname+'/../game/TileGrid');
-var TileData    = require(__dirname+'/../game/TileData');
-var RangeSprite = require(__dirname+'/RangeSprite');
-var TargetInfoScene = require(__dirname+'/TargetInfoScene');
-var Unit  = require(__dirname+'/Unit');
-var Soil  = require(__dirname+'/Soil');
-var Plant = require(__dirname+'/Plant');
+var TileEntity  = require(__dirname+'/TileEntity');
+var Loader      = require(__dirname+'/MapSceneLoader');
+var Interaction = require(__dirname+'/MapSceneInteraction');
+var Actor       = require(__dirname+'/Actor');
+var Unit        = require(__dirname+'/Unit');
+var TargetUI    = require(__dirname+'/TargetUI');
+var TurnOrderUI = require(__dirname+'/TurnOrderUI');
 
 var MapScene = function (floorData) {
   if (floorData === undefined) floorData = { name: 'test', w: 200, h: 100 };
   this.selectedUnit = null;
+  this.selectedUnitStartPosition = new PIXI.Point();
   this.moveRangeSprite = null;
   Scene.call(this, floorData.name);
 
   setupContainers(this);
-
-  loadTilemap(this, floorData);
-  loadOther(this, floorData);
-  loadUI(this);
-  loadUnits(this, floorData);
-  
+  this.setScreenScale(1.5);
+  Loader.load(this, floorData);
+  this.camera_width = Game.props.stage_width - TargetUI.props.WIDTH;
+  this.camera_height = Game.props.stage_height - TurnOrderUI.props.HEIGHT;
+  this.interaction = new Interaction(this);
 }
 
 MapScene.prototype = Object.create(Scene.prototype);
 MapScene.prototype.constructor = MapScene;
+
+Object.defineProperty(MapScene.prototype, 'actors', {
+  get: function () { return this.entities.Actor; }
+});
 
 Object.defineProperty(MapScene.prototype, 'units', {
   get: function () { return this.entities.Unit; }
@@ -39,44 +42,74 @@ Object.defineProperty(MapScene.prototype, 'plants', {
 });
 
 
+MapScene.prototype.tick = function (time) {
+  console.log('tick '+ time);
+  for (var i = 0, l = this.actors.length; i < l; i++) 
+  {
+    var actor = this.actors[i];
+    actor.wait -= (time * actor.speed);
+    console.log(''+actor.type+': '+actor.wait);
+  }
+}
+
 MapScene.prototype.update = function ()
 {
   Scene.prototype.update.call(this);
-  var xx, yy;
-
-  if (this.selectedUnit)
-  { 
-    selectedUnitInput(this);
-  }
-  cameraMoveInput(this);
+  this.interaction.update();
 }
 
-MapScene.prototype.inRange = function (x, y) {
-  for (var i = 0, l = this.moveRangeSprite.tiles.length; i < l; i++)
-  {
-    var tile = this.moveRangeSprite.tiles[i];
-    if (tile.x == x && tile.y == y) return true;
-  }
+MapScene.prototype.canMoveHere = function (ent, x, y) {
+  var isWall = this.tilemap.getAt(x, y, 'wall'),
+      hasTile = this.hasTile(x, y),
+      occupied = isOccupied(x, y, this, ent);
+  
+  return !isWall && !occupied && hasTile;
+}
+
+MapScene.prototype.canPassThroughHere = function (ent, x, y) {
+  var isWall = this.tilemap.getAt(x, y, 'wall'),
+      hasTile = this.hasTile(x, y),
+      passable = isOccupied(x, y, this, ent, false);
+
+  return !isWall && !passable && hasTile;
+}
+
+MapScene.prototype.canInteractHere = function (ent, x, y) {
   return false;
 }
 
+MapScene.prototype.interactHere = function (ent, x, y) {
+  switch(typeOfEntity(ent))
+  {
+    case "Unit":
+        this.unitInteractsHere(ent, x, y);
+      break;
 
-MapScene.prototype.canUnitMoveHere = function (unit, x, y) {
-  var isWall = this.tilemap.getAt(x, y, 'wall'),
-      noTile = this.tilemap.getAt(x, y, 'tile.id') < 0,
-      hasUnit = isUnitAt(x, y, this, unit);
-  
-  return !isWall && !noTile && !hasUnit;
+    case "Enemy":
+        this.enemyInteractsHere(ent, x, y);
+      break;
+  }
 }
 
-MapScene.prototype.canUnitPassThroughHere = function (unit, x, y) {
-  var isWall = this.tilemap.getAt(x, y, 'wall'),
-      noTile = this.tilemap.getAt(x, y, 'tile.id') < 0,
-      hasEnemy = isEnemyAt(x, y, this);
+MapScene.prototype.unitInteractsHere = function (unit, x, y)
+{
 
-  return !isWall && !noTile && !hasEnemy;
 }
 
+MapScene.prototype.enemyInteractsHere = function (enemy, x, y)
+{
+
+}
+
+
+MapScene.prototype.getEntitiesAt = function (x, y) {  
+  var ents = Object.values(this.entitiesByLocation[y][x]);
+  return ents;
+}
+
+MapScene.prototype.hasTile = function (x, y) {
+  return this.tilemap.getAt(x, y, 'tile.id') >= 0;
+}
 
 MapScene.prototype.getTile = function (x, y, local) {
   if (local === undefined) local = false;
@@ -100,122 +133,83 @@ MapScene.prototype.setTile = function (x, y, val, local) {
   this.tilemap.setAt(x, y, val);
 }
 
-MapScene.prototype.unitClicked = function (unit) {
-  this.selectedUnit = unit;
-  this.moveRangeSprite.visible = true;
-  var range = this.selectedUnit.stats.move_range ? this.selectedUnit.stats.move_range : 5;
-  this.moveRangeSprite.drawUnitsRange(this.selectedUnit, 0, range);
+MapScene.prototype.setScreenScale = function (scale) {
+  this.containers.Screen.scale.x = this.containers.Screen.scale.y = scale;
 }
+
+MapScene.prototype.cameraMoveTo = function (x, y) {
+  var scale = this.containers.Screen.scale.x,
+    xx = (x * Game.props.tile_width * scale) + (Game.props.tile_width * scale * 0.5),
+    yy = (y * Game.props.tile_height * scale) + (Game.props.tile_height * scale * 0.5);
+
+  this.containers.Screen.x = -(xx - (this.camera_width * 0.5)) + TargetUI.props.WIDTH;
+  this.containers.Screen.y = -(yy - (this.camera_height * 0.5)) + TurnOrderUI.props.HEIGHT;
+
+}
+
+MapScene.prototype.entityClicked = function (ent) {
+  this.targetUI.selectedEntity = ent;
+}
+
+MapScene.prototype.unitClicked = function (unit) {
+  this.entityClicked(unit);
+  this.unitSelected(unit);
+}
+
+MapScene.prototype.unitSelected = function (unit) {
+  this.interaction.unitSelected(unit); 
+  this.cameraMoveTo(unit.tileX, unit.tileY);
+}
+
+MapScene.prototype.actorsTurn = function (actor) {
+  if (actor instanceof Unit) {
+    this.unitSelected(actor);
+    this.targetUI.selectedEntity = actor;
+  }
+}
+
+
+MapScene.prototype.entityPositionChanged = function (ent) {
+  if (!(ent instanceof TileEntity) && 
+      (! ent.hasOwnProperty('tileX') ||
+       ! ent.hasOwnProperty('tileY') ||
+       ! ent.hasOwnProperty('uid'))) return;
+
+  var loc = this.locationsByEntity[ent.uid];
+  delete this.entitiesByLocation[loc.y][loc.x][ent.uid];
+  loc.x = ent.tileX;
+  loc.y = ent.tileY;
+  this.entitiesByLocation[ent.tileY][ent.tileX][ent.uid] = ent;
+}
+
+MapScene.prototype._onEntityAdded = function (ent) {
+  ent._onPositionChanged = this.entityPositionChanged.bind(this);
+
+  if (ent instanceof Actor) this.entities.Actor.push(ent);
+
+  if (!(ent instanceof TileEntity)) return;
+  
+  this.entitiesByLocation[ent.tileY][ent.tileX][ent.uid] = ent;
+  this.locationsByEntity[ent.uid] = {x: ent.tileX, y: ent.tileY};
+}
+
+
 
 // Private methods
 
 function setupContainers(scene)
 {
   scene.entities['Soil']  = [];
+  scene.entities['Actor'] = [];
   scene.entities['Unit']  = [];
   scene.entities['Enemy'] = [];
   scene.entities['Plant'] = [];
 
-  scene.containers['Background']  = new PIXI.Container();
-  scene.containers['Soil']        = new PIXI.Container();
-  scene.containers['RangeSprite'] = new PIXI.Container();
-  scene.containers['Plant']       = new PIXI.Container();
-  scene.containers['Unit']        = new PIXI.Container();
-
-  scene.addChild(scene.containers['Background']);
-  scene.addChild(scene.containers['Soil']);
-  scene.addChild(scene.containers['RangeSprite']);
-  scene.addChild(scene.containers['Plant']);
-  scene.addChild(scene.containers['Unit']);
-}
-
-
-function loadTilemap(scene, data)
-{
-  var tilemap = new TileGrid(data.w, data.h);
-  if (data.tiles && data.tiles.length > 0)
-  {
-    for (var i = 0, l = data.tiles.length; i < l; i++)
-    {
-      var id = data.tiles[i];
-      var type = data.types[id];
-      if (type)
-      {
-        var x = i % data.w;
-        var y = Math.floor(i / data.w);
-        tilemap.setAt(x, y, {"tile.type": type, "tile.id": id});
-        var props = getTileProperties(type, id);
-        tilemap.setAt(x, y, props);
-      }
-    }
-  }
-  scene.addUpdatable(tilemap);
-  scene.addEntity(tilemap, 'Background');
-
-  scene.tilemap = tilemap;
-}
-
-function loadUnits(scene, data)
-{
-  if (! data.units) return;
-  var u, unit;
-  for (var i = 0, l = data.units.length; i < l; i++)
-  {
-    u = data.units[i];
-    unit = new Unit(u.type);
-    unit.moveTo(u.x, u.y, true);
-    scene.addEntity(unit);
-  }
-}
-
-function loadOther(scene, data)
-{
-  if (! data.other) return;
-  var d, ent;
-  for (var i = 0, l = data.other.length; i < l; i++)
-  {
-    d = data.other[i];
-    switch (d.entType)
-    {
-      case "Soil":
-        addSoil(scene, d);
-        break;
-    }
-  }
-}
-
-function addSoil(scene, data)
-{
-  var soil = new Soil(data.type);
-
-  soil.tileX = data.x;
-  soil.tileY = data.y;
-  if (data.state)
-    soil.state = data.state;
-
-  scene.addEntity(soil, 'Soil');
-
-  // if the soil has plant data
-  if (data.plant)
-  {
-    var plant = new Plant(data.plant.type);
-    
-    if (data.plant.state)
-      plant.state = data.plant.state;
-
-    scene.addEntity(plant, 'Plant');
-    plant.plant(soil);
-  }
-}
-
-function loadUI(scene)
-{
-  scene.targetUI = new TargetInfoScene();
-  scene.targetUI.x = Game.props.stage_width - scene.targetUI.width;
-  scene.addScene(scene.targetUI, true);
-
-  scene.moveRangeSprite = createRangeSprite(scene);
-  scene.containers['RangeSprite'].addChild(scene.moveRangeSprite);
+  scene.createLayer('Background');
+  scene.createLayer('Soil');
+  scene.createLayer('RangeSprite');
+  scene.createLayer('Plant');
+  scene.createLayer('Unit');
 }
 
 function getTileX(x) {
@@ -228,91 +222,23 @@ function getTileY(y) {
   return Math.floor(y / th);
 }
 
-function createRangeSprite(map) {
-  var g = new RangeSprite(map);
-  g.visible = false;
-  return g;
-}
-
-function isUnitAt(x, y, scene, excluded) {
-  var units = scene.units;
-  for(var i = 0, l = units.length; i < l; i++)
+function isOccupied(x, y, scene, excluded, all) {
+  var entities = scene.getEntitiesAt(x, y);
+  if (all == undefined) all = true;
+  if (entities.length == 0) return false;
+  for (var i = 0, l = entities.length; i < l; i++)
   {
-    var unit = units[i];
-    if (unit.tileX == x && unit.tileY == y && unit != excluded) return true;
+    var ent = entities[i];
+    if (ent != excluded && all) 
+    {
+      return true;
+    }
+    if (!all && excluded && ent.entType == excluded.entType)
+    {
+      continue;
+    }
   }
   return false;
 }
-
-function isEnemyAt(x, y, scene, excluded) {
-  var enemies = scene.enemies;
-  for (var i = 0, l = enemies.length; i < l; i++)
-  {
-    var enemy = enemies[i];
-    if (enemy.tileX == x && enemy.tileY == y && enemy != excluded) return true;
-  }
-  return false;
-}
-
-function selectedUnitInput(scene) {
-  xx = scene.selectedUnit.tileX;
-  yy = scene.selectedUnit.tileY;
-
-  if (Game.Input.keyReleased(Keyboard.W))
-  {
-    if (scene.inRange(xx, yy - 1))
-      scene.selectedUnit.moveTo(xx, yy - 1);
-  } 
-  else if (Game.Input.keyReleased(Keyboard.S)) 
-  {
-    if (scene.inRange(xx, yy + 1))
-      scene.selectedUnit.moveTo(xx, yy + 1);
-  }
-  if (Game.Input.keyReleased(Keyboard.A)) 
-  {
-    if (scene.inRange(xx - 1, yy))
-      scene.selectedUnit.moveTo(xx - 1, yy);
-  }
-  else if (Game.Input.keyReleased(Keyboard.D))
-  {
-    if (scene.inRange(xx + 1, yy))
-      scene.selectedUnit.moveTo(xx + 1, yy);
-  }
-
-  if (Game.Input.mouseDown() || Game.Input.keyDown(Keyboard.SPACE))
-  {
-    scene.selectedUnit = null;
-    scene.moveRangeSprite.visible = false;
-  }
-}
-
-function cameraMoveInput(scene) {
-  if (Game.Input.keyDown(Keyboard.UP)) 
-  {
-    scene.entContainer.y += 2;
-  }
-  else if (Game.Input.keyDown(Keyboard.DOWN))
-  {
-    scene.entContainer.y -= 2;
-  }
-  if (Game.Input.keyDown(Keyboard.LEFT)) 
-  {
-    scene.entContainer.x += 2;
-  }
-  else if (Game.Input.keyDown(Keyboard.RIGHT))
-  {
-    scene.entContainer.x -= 2; 
-  }
-}
-
-function getTileProperties(type, id)
-{
-  if (! TileData.hasOwnProperty(type))
-  {
-    type = 'default'
-  }
-  return TileData[type].properties;
-}
-
 
 module.exports = MapScene;

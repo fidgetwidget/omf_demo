@@ -1,5 +1,7 @@
+var Node = require(__dirname+'/SearchNode');
 
 var directions = [[-1, 0], [0, -1], [1, 0], [0, 1]];
+var count = 0;
 
 var RangeSprite = function (map) {
   this.tiles = [];
@@ -18,8 +20,46 @@ RangeSprite.prototype.clearTiles = function () {
   this.tiles.length = 0;
 }
 
+RangeSprite.prototype.search = function (x, y, min, max, isOpenOrPassable, isBlocked, onPush)
+{
+  var startNode = new Node(x, y),
+      nodes = [];
+  this.searchNeighbors(nodes, startNode, 0, min, max, isOpenOrPassable, isBlocked, onPush);
+  return nodes;
+  
+}
+RangeSprite.prototype.searchNeighbors = function (nodes, node, r, min, max, isOpenOrPassable, isBlocked, onPush)
+{
+  count++;
+  if (r >= max) return;
+  if (r >= min)
+  {
+    if (! isOpenOrPassable(node.x, node.y)) return;
+
+    node.r = r;
+    if (isBlocked(node.x, node.y))
+      node.blocked = true;
+
+    nodes.push(node);
+    if (onPush)
+      onPush(node);  
+  }
+  
+  if (r+1 >= max) return;
+
+  var neighbors = node.getNeighbors(isOpenOrPassable);
+
+  for (var i = 0, l = neighbors.length; i < l; i++) {
+
+    var neighbor = neighbors[i];
+        n = nodes.find( function (n) { return n.x == neighbor.x && n.y == neighbor.y })
+    if (n && n.r <= r) continue;
+    this.searchNeighbors(nodes, neighbor, r+1, min, max, isOpenOrPassable, isBlocked, onPush);
+  }
+}
+
 // TODO: improve this to support drawing ranges with min and max values
-RangeSprite.prototype.drawUnitsRange = function (unit, min, max) {
+RangeSprite.prototype.drawUnitsRange = function (entity, min, max) {
   var map = this.map;
 
   this.clearTiles();
@@ -27,41 +67,26 @@ RangeSprite.prototype.drawUnitsRange = function (unit, min, max) {
 
   this.lineStyle(1, this.draw.color, this.draw.alpha);
 
-  if (min != 0)
-  {
-    this.addTiles(unit, unit.tileX, unit.tileY, 0, min, 
-      function (x, y) { return !map.canUnitMoveHere(unit, x, y); },
-      function (x, y) { return map.canUnitPassThroughHere(unit, x, y); }, true);
-  }
+  count = 0;
+  var _this = this;
+  this.search(entity.tileX, entity.tileY, min, max, 
+    function (x, y) {
+      return map.canPassThroughHere(entity, x, y);
+    },
+    function (x, y) {
+      return !map.canMoveHere(entity, x, y);
+    },
+    function (node) {
+      if (_this.tiles.find( function (tile) { return node.x == tile.x && node.y == tile.y; })) return;
+      // don't add tiles that already exist
+      _this.tiles.push(node);
+      if (node.blocked) {
+        drawRect(_this, node.x, node.y);
+      } else {
+        drawFull(_this, node.x, node.y);
+      }
 
-  this.addTiles(unit, unit.tileX, unit.tileY, min, max, 
-    function (x, y) { return !map.canUnitMoveHere(unit, x, y); },
-    function (x, y) { return map.canUnitPassThroughHere(unit, x, y); });
-
-}
-
-RangeSprite.prototype.addTiles = function (unit, x, y, r, max_r, blocked, passable, dontDraw) {
-  var d = 0, dir = null, xx = x, yy = y, l = directions.length, block = blocked(x, y), pass = passable(x, y);
-
-  if (r >= max_r) return;
-  if (block && !pass) return;
-  
-  while (d < l) {
-    dir = directions[d];
-    xx = x + dir[0];
-    yy = y + dir[1];
-    this.addTiles(unit, xx, yy, r+1, max_r, blocked, passable);
-    d++;
-  }
-
-  this.tiles.push({x: x, y: y});
-
-  if (dontDraw) return;
-
-  if (block)
-    drawRect(this, x, y);
-  else
-    drawFull(this, x, y);
+    });
 }
 
 function drawFull(g, x, y) {

@@ -20,18 +20,16 @@ Unit.prototype.constructor = Unit;
 
 // Methods
 
-Unit.prototype.initialize = function () 
-{
+Unit.prototype.loadData = function () {
   loadStats(this);
-
   this.offset.x = UNIT_OFFSET.x;
   this.offset.y = UNIT_OFFSET.y;
-  
+}
+
+Unit.prototype.bindBehaviour = function () {
   this.sprite.interactive = true;
   this.sprite.on('click', onClick, this);
   this.sprite.on('touchstart', onClick, this);
-
-  Actor.prototype.initialize.call(this);
 }
 
 // Private Methods
@@ -45,6 +43,9 @@ function loadStats(unit)
   unit.stats = {};
   for (var k in stats)
     unit.stats[k] = stats[k];
+
+  if (unit.stats.speed)
+    unit.speed = unit.stats.speed;
 }
 
 function makeSprite(unit)
@@ -64,6 +65,7 @@ function getFrame(type, state, index)
 
 function onClick(e)
 {
+  e.stopPropagation();
   if (this.scene && typeof this.scene.unitClicked == 'function')
     this.scene.unitClicked(this);
 }
